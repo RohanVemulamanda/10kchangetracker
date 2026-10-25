@@ -314,6 +314,37 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 
 ---
 
+## Phase 4: backtest
+
+Choices made 2026-10-25, **before any stock returns were downloaded or looked at.** Rohan approved the recommended option for each question in the Phase 4 plan. This section is the test design written down in advance. Any later change to it must be recorded here as a change, with the reason, and the results under the original design must still be reported.
+
+### D-033 Test design, fixed in advance
+- **Main measure:** cosine similarity, `main` version (risk summaries removed), the paper's main measure.
+- **When a score can be used:** from the first trading day of the month after the month the 10-K was accepted (the paper's rule). A filing accepted after the close on the last day of a month is still public before the next month opens, so there's no look-ahead. A score is used for 12 months, or until the company's next score replaces it.
+- **Who is in the portfolios each month:** every company with a usable score. Companies stay in for those 12 months even if they leave the S&P 500, because dropping companies that fall out of the index would remove exactly the stocks that did badly. A company leaves when it's delisted, with its final (delisting) return included.
+- **Portfolios:** each month, sort companies by cosine similarity into 5 equal groups (quintiles). Q1 = lowest similarity ("changers"), Q5 = highest ("non-changers"). Equal-weighted. Hold for one month, then re-sort.
+- **The main number:** the monthly return of Q5 − Q1 (buy non-changers, sell changers), adjusted for risk with the Fama–French 5 factors plus momentum (the alpha), with Newey–West standard errors (3 lags). Shown alongside: the raw return, and the market-only (CAPM) and Fama–French 3-factor alphas.
+- **Second test:** each month, regress every stock's return on its similarity rank (scaled 0 to 1), controlling for company size and past 12-month return (Fama–MacBeth). Book-to-market is left out unless we get accounting data (WRDS).
+- **Periods:**
+  - **Main test: portfolio months March 2022 – February 2026 (48 months).** March 2022 is the first month most companies have a score (438; about 494 from August 2022).
+  - **Hold-out: March 2026 to the latest complete month.** March 2026 is when nearly all fiscal-2025 scores take effect (450 companies). It's run once, only after the main results are final, and reported whatever it shows.
+  - **Why split by calendar month, not fiscal year:** about 88 companies with June–December year-ends file their fiscal-2025 10-Ks from September 2025 to February 2026, so their scores enter inside the main period. What has to stay untouched is the hold-out *returns*, which a calendar split guarantees.
+  - **The hold-out is short:** about 7 months as of October 2026. It can confirm the direction of the result, not establish it on its own.
+- **Robustness checks (all reported, whatever they show):**
+  - the other three measures (Jaccard, minimum edit, simple)
+  - the `with_summary` version
+  - without the 8 `voice_switch` pairs (D-031)
+  - value-weighted (by market value at the start of each month)
+  - without financial companies (SIC codes 6000–6999, from each filing, D-015)
+  - "next trading day after acceptance" timing (D-008) instead of the next month
+- **How we'll read the main result:** with 48 months, a long-short spread with a typical volatility of 1.5–2.5% a month has a standard error of roughly 0.2–0.35% a month. So only an alpha of about 0.45–0.7% a month or more would be clearly different from zero (t > 2). Agreed in advance:
+  - alpha > 0 with t > 2: **consistent with *Lazy Prices*** on recent S&P 500 data;
+  - the 95% confidence interval includes zero: **inconclusive.** It doesn't show the effect is gone (known limitations 2 and 3);
+  - the interval's upper end is below 0.25% a month: **evidence against a meaningful effect** in this sample. The 0.25% cut-off is our choice of the smallest economically interesting effect (3% a year); it's not from the paper.
+- **Not decided yet:** the price data source (D-034), which depends on whether Rohan has WRDS access.
+
+---
+
 ## Known limitations (to disclose)
 
 0. **(Phase 2, found in the Phase 3 review)** Constellation Brands' sections end with a leftover page header ("PART I OTHER KEY INFORMATION Table of Contents") that the D-021 cleaning missed. It's in every year, so it barely affects change scores.
