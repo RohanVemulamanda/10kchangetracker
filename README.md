@@ -13,7 +13,7 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**. Start
 | 2 | Extract Item 1A (Risk Factors) | **Done**: all 2,494 sample filings extracted; 20 of 20 correct in the hand review ([report](docs/phase2_report.md)) |
 | 3 | Change scores | **Done**: 2,482 of 2,494 sample 10-Ks scored on four measures (the other 12 are first-ever 10-Ks) ([report](docs/phase3_report.md)) |
 | 4 | Backtest | **In progress**: test design fixed in advance (D-033); factors and portfolio code built; waiting for WRDS price data |
-| 5 | Live tool and dashboard | **In progress**: `update` and the website are built; first live update done; not yet published |
+| 5 | Live tool and dashboard | **Built, not published**: `update` and the website work; 176 live filings added ([report](docs/phase5_report.md)) |
 
 ## Setup (one time)
 
