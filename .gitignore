@@ -30,3 +30,6 @@ Thumbs.db
 
 # --- Half-written downloads (only exist if a run is interrupted) ---
 *.part
+
+# --- The built dashboard (python run.py build-site); published to the gh-pages branch, not main ---
+site/

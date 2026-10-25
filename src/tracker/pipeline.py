@@ -12,6 +12,8 @@
   score                Phase 3: score how much each sample 10-K's Risk Factors changed from the prior year
   review-scores        Phase 3: write a page of pairs to check by hand
   update               Phase 5: find, download, extract and score new 10-Ks from today's S&P 500 members
+  build-site           Phase 5: write the dashboard website to site/
+  preview-site         Phase 5: show the built site at http://localhost:8000
   all           universe -> map-tickers -> find-filings -> download -> summary
 """
 from __future__ import annotations
@@ -35,6 +37,7 @@ from .score import connect_changes, run_scoring
 from .score_report import write_phase3_summary, write_score_review_page
 from .wordlists import WordListError, load_word_lists, measure_change_words
 from .live import MemberListError, fetch_current_members, find_live_filings, load_approved, review_reasons
+from .site import build_site
 from .header import api_minus_header_minutes, index_headers_url, parse_index_headers
 from .log_setup import setup_logging
 from .selection import mapping_problem, select_filings
@@ -363,6 +366,35 @@ def write_live_review(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn
             f"(reports/live_review.csv). Approve checked ones in data/reference/live_approved.csv.")
 
 
+def step_build_site(settings: dict, conn: sqlite3.Connection) -> None:
+    p = paths(settings)
+    sconn = connect_sections(p["sections_db"])
+    cconn = connect_changes(p["changes_db"])
+    try:
+        out_dir = project_path("site")
+        counts = build_site(conn, sconn, cconn, p["reference_dir"], out_dir)
+        size_mb = sum(f.stat().st_size for f in out_dir.rglob("*") if f.is_file()) / 1e6
+        print(f"Site written to {out_dir}: {counts['companies']} companies, {counts['filings']} filings, "
+              f"{size_mb:.0f} MB. Look at it with: python run.py preview-site")
+    finally:
+        sconn.close()
+        cconn.close()
+
+
+def step_preview_site() -> None:
+    """Serve site/ at http://localhost:8000 (only on this computer) until Ctrl+C."""
+    import functools
+    import http.server
+
+    folder = project_path("site")
+    if not (folder / "index.html").exists():
+        raise RuntimeError("No site yet. Run `python run.py build-site` first.")
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(folder))
+    with http.server.ThreadingHTTPServer(("127.0.0.1", 8000), handler) as server:
+        print("Open http://localhost:8000 in your browser. Press Ctrl+C to stop.")
+        server.serve_forever()
+
+
 def step_check_filers(settings: dict, conn: sqlite3.Connection) -> None:
     """List sample 10-Ks whose company looks too small to be in the S&P 500 (a reused ticker)."""
     p = paths(settings)
@@ -398,6 +430,12 @@ def run(command: str, tickers: list[str] | None = None, seed: int | None = None,
             return 0
         if command == "extract":
             step_extract(settings, conn, tickers, force)
+            return 0
+        if command == "build-site":
+            step_build_site(settings, conn)
+            return 0
+        if command == "preview-site":
+            step_preview_site()
             return 0
         if command == "update":
             step_update(settings, conn, client)

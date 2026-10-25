@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10-K Change Tracker</title>
+<meta name="description" content="How much S&P 500 companies rewrite the Risk Factors in their 10-K each year, and what changed.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#">10-K Change Tracker</a>
+    <p class="tagline">How much each S&amp;P 500 company rewrote the Risk Factors in its annual report, and exactly what changed.</p>
+    <div class="search">
+      <label for="q" class="visually-hidden">Find a company</label>
+      <input id="q" type="search" placeholder="Find a company or ticker (e.g. Apple, JPM)" autocomplete="off">
+      <ul id="suggestions" role="listbox" hidden></ul>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="main" tabindex="-1">
+  <p class="loading">Loading…</p>
+</main>
+
+<footer class="wrap foot">
+  <p>Data: SEC EDGAR 10-K filings, Item 1A (Risk Factors). Method after Cohen, Malloy &amp; Nguyen,
+  <em>Lazy Prices</em> (Journal of Finance, 2020). Every choice is documented in the project's DECISIONS.md.
+  Not investment advice.</p>
+  <p id="built"></p>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

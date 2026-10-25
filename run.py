@@ -32,6 +32,8 @@ COMMANDS = {
     "score": "Phase 3: score how much each sample 10-K's Risk Factors changed from the prior year. Safe to stop and restart.",
     "review-scores": "Phase 3: write reports/phase3_review.html with pairs to check by hand.",
     "update": "Phase 5: find, download, extract and score new 10-Ks from today's S&P 500 members.",
+    "build-site": "Phase 5: write the dashboard website to site/.",
+    "preview-site": "Phase 5: show the built site at http://localhost:8000 (Ctrl+C to stop).",
 }
 
 

@@ -1,0 +1,149 @@
+"""Phase 5: build the dashboard, a static website in site/ (D-038).
+
+  site/index.html, app.js, style.css   the page (copied from src/tracker/site_assets/)
+  site/data/meta.json                  build date, counts, the research distribution
+  site/data/companies.json             every company, for the search box
+  site/data/season.json                the latest filing season's biggest changes
+  site/data/c/<cik>.json               one company: every scored year, with its new and dropped sentences
+
+No server is needed: the page loads these files as you click, so it can be hosted for free
+on GitHub Pages. Which filings are shown:
+  - the research sample (role 'sample'), scored;
+  - live filings (role 'live') with nothing on the review list, or approved by hand (D-037).
+Not published: the Loughran-McDonald counts (free for academic use only, D-032).
+"""
+from __future__ import annotations
+
+import bisect
+import json
+import shutil
+import sqlite3
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+
+from .live import load_approved, review_reasons
+from .wordlists import new_and_dropped
+
+ASSETS = Path(__file__).resolve().parent / "site_assets"
+SEASON_TOP = 25
+MEASURES = ("sim_cosine", "sim_jaccard", "sim_min_edit", "sim_simple")
+
+
+def edgar_url(cik: int, accession: str) -> str:
+    return f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}/{accession}-index.htm"
+
+
+def change_percentile(cosine: float, research_cosines: list[float]) -> float:
+    """Share of research-sample 10-Ks (0-100) that changed less than this one: lower similarity
+    = more change. research_cosines must be sorted."""
+    more_similar = len(research_cosines) - bisect.bisect_right(research_cosines, cosine)
+    return round(100 * more_similar / len(research_cosines), 1)
+
+
+def shown_filings(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqlite3.Connection,
+                  reference_dir: Path) -> list[dict]:
+    """Every filing the dashboard shows, with its scores and filing details."""
+    reasons = review_reasons(conn, sconn, cconn)
+    approved = load_approved(reference_dir)
+    filings = {r["accession_number"]: dict(r) for r in conn.execute(
+        "SELECT accession_number, cik, company_cik, fiscal_year, filing_date, role, prior_accession "
+        "FROM filings WHERE selected = 1 AND role IN ('sample', 'live')")}
+    all_filings = {r[0]: r[1:] for r in conn.execute("SELECT accession_number, cik, fiscal_year FROM filings")}
+    shown = []
+    for row in cconn.execute("SELECT * FROM changes WHERE version = 'main' AND status = 'ok' AND section = 'item_1a'"):
+        f = filings.get(row["accession_number"])
+        if f is None:
+            continue
+        if f["role"] == "live" and reasons.get(f["accession_number"]) and f["accession_number"] not in approved:
+            continue
+        prior_cik, prior_fy = all_filings.get(f["prior_accession"], (None, None))
+        shown.append({**f, **{m: row[m] for m in MEASURES}, "flags": row["flags"] or "",
+                      "prior_fiscal_year": prior_fy, "prior_cik": prior_cik,
+                      "prior_words": row["prior_words"], "current_words": row["current_words"],
+                      "sentences_kept": row["sentences_kept"]})
+    return shown
+
+
+def build_site(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqlite3.Connection,
+               reference_dir: Path, out_dir: Path) -> dict:
+    """Write the whole site to out_dir (replacing what was there). Returns counts."""
+    filings = shown_filings(conn, sconn, cconn, reference_dir)
+    research = sorted(f["sim_cosine"] for f in filings if f["role"] == "sample")
+    names = {r[0]: r[1:] for r in conn.execute("SELECT cik, name_current, sic_description FROM companies")}
+    sectors = dict(conn.execute(
+        "SELECT cik, sector FROM live_members WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM live_members)"
+    ).fetchall()) if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'live_members'").fetchone() else {}
+    summaries = {r[0]: r[1] for r in cconn.execute("SELECT accession_number, words_removed FROM risk_summaries "
+                                                    "WHERE end_line IS NOT NULL")}
+
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+    (out_dir / "data" / "c").mkdir(parents=True)
+    for asset in ("index.html", "app.js", "style.css"):
+        shutil.copy(ASSETS / asset, out_dir / asset)
+
+    by_company: dict[int, list[dict]] = defaultdict(list)
+    for f in filings:
+        f["change_percentile"] = change_percentile(f["sim_cosine"], research)
+        by_company[f["company_cik"]].append(f)
+
+    companies = []
+    for cik, items in by_company.items():
+        items.sort(key=lambda f: (f["fiscal_year"], f["filing_date"]))
+        name, sic_description = names.get(cik, (None, None))
+        tickers = sorted({t for t in (conn.execute(
+            "SELECT member_tickers FROM filings WHERE company_cik = ? AND role IN ('sample', 'live') "
+            "ORDER BY filing_date DESC LIMIT 1", (cik,)).fetchone() or [""])[0].split(",") if t})
+        years = []
+        for f in items:
+            added = [t for (t,) in cconn.execute("SELECT text FROM changed_sentences WHERE accession_number = ? "
+                                                 "AND kind = 'added' ORDER BY position", (f["accession_number"],))]
+            removed = [t for (t,) in cconn.execute("SELECT text FROM changed_sentences WHERE accession_number = ? "
+                                                   "AND kind = 'removed' ORDER BY position", (f["accession_number"],))]
+            new, dropped = new_and_dropped(added, removed)
+            years.append({
+                "accession": f["accession_number"], "fiscal_year": f["fiscal_year"],
+                "prior_fiscal_year": f["prior_fiscal_year"], "filing_date": f["filing_date"],
+                "edgar": edgar_url(f["cik"], f["accession_number"]),
+                "prior_edgar": edgar_url(f["prior_cik"], f["prior_accession"]) if f["prior_cik"] else None,
+                "live": f["role"] == "live",
+                "scores": {m[4:]: round(f[m], 4) for m in MEASURES},
+                "change_percentile": f["change_percentile"],
+                "words": [f["prior_words"], f["current_words"]],
+                "kept": f["sentences_kept"], "moved": len(added) - len(new),
+                "flags": f["flags"], "summary_removed": summaries.get(f["accession_number"]) is not None,
+                "new": new, "dropped": dropped,
+            })
+        latest = years[-1]
+        companies.append({"cik": cik, "name": name, "tickers": tickers,
+                          "sector": sectors.get(cik) or sic_description,
+                          "latest_year": latest["fiscal_year"], "latest_percentile": latest["change_percentile"]})
+        (out_dir / "data" / "c" / f"{cik}.json").write_text(
+            json.dumps({"cik": cik, "name": name, "tickers": tickers, "sector": sectors.get(cik) or sic_description,
+                        "years": years}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    companies.sort(key=lambda c: (c["name"] or "").lower())
+
+    # The latest filing season: 10-Ks filed in the most recent calendar year with filings
+    season_year = max(f["filing_date"][:4] for f in filings)
+    in_season = [f for f in filings if f["filing_date"][:4] == season_year]
+    ranked = sorted((f for f in in_season if not f["flags"]), key=lambda f: f["sim_cosine"])[:SEASON_TOP]
+    season = {
+        "year": season_year, "filings": len(in_season),
+        "flagged_left_out": sum(1 for f in in_season if f["flags"]),
+        "top": [{"cik": f["company_cik"], "name": names.get(f["company_cik"], (None,))[0],
+                 "fiscal_year": f["fiscal_year"], "filing_date": f["filing_date"],
+                 "change_percentile": f["change_percentile"], "cosine": round(f["sim_cosine"], 4),
+                 "words": [f["prior_words"], f["current_words"]]} for f in ranked],
+    }
+    meta = {
+        "built": datetime.now().isoformat(timespec="minutes"),
+        "companies": len(companies), "filings": len(filings),
+        "research_filings": len(research), "live_filings": sum(1 for f in filings if f["role"] == "live"),
+        "research_cosine_median": research[len(research) // 2],
+        "backtest": "pending",
+    }
+    for name, data in (("companies", companies), ("season", season), ("meta", meta)):
+        (out_dir / "data" / f"{name}.json").write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")),
+                                                       encoding="utf-8")
+    return {"companies": len(companies), "filings": len(filings), "season": season_year}
