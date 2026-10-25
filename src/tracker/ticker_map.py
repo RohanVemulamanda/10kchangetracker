@@ -8,8 +8,9 @@ Why this is tricky (DECISIONS.md D-009):
 
 So we map in this order:
   1. data/reference/manual_cik_map.csv  hand-checked fixes; always wins
-  2. SEC's current ticker file
-  3. Wikipedia's current S&P list (has CIKs) as a fallback for current members
+  2. data/reference/not_on_edgar.csv    companies whose 10-Ks aren't on EDGAR (D-017)
+  3. SEC's current ticker file
+  4. Wikipedia's current S&P list (has CIKs) as a fallback for current members
 Anything left is written to reports/unmapped_tickers.csv for review. We never guess.
 
 Separately, Wikipedia's CIKs for current members are compared with SEC's mapping.
@@ -67,7 +68,11 @@ def load_sec_ticker_map(client: EdgarClient, raw_dir: Path, refresh: bool = Fals
 
 
 def load_manual_map(path: Path) -> dict[str, dict]:
-    """Read hand-checked ticker -> CIK fixes. Columns: ticker, cik, company_name, evidence."""
+    """Read hand-checked ticker -> CIK fixes. Columns: ticker, cik, company_name, evidence.
+
+    Every row must say how it was checked (the evidence column), so each mapping
+    can be defended later.
+    """
     if not path.exists():
         return {}
     mapping = {}
@@ -80,8 +85,30 @@ def load_manual_map(path: Path) -> dict[str, dict]:
                 cik = int(row["cik"])
             except (TypeError, ValueError):
                 raise ValueError(f"{path.name} line {line_number}: CIK {row.get('cik')!r} is not a number")
-            mapping[ticker] = {"cik": cik, "title": row.get("company_name", ""), "evidence": row.get("evidence", "")}
+            if not (row.get("evidence") or "").strip():
+                raise ValueError(f"{path.name} line {line_number}: {ticker} has no evidence; say how it was checked")
+            mapping[ticker] = {"cik": cik, "title": row.get("company_name", ""), "evidence": row["evidence"]}
     return mapping
+
+
+def load_not_on_edgar(path: Path) -> dict[str, dict]:
+    """Read companies whose 10-Ks are not on EDGAR. Columns: ticker, company_name, reason, evidence.
+
+    Example: a bank with no holding company files its reports with its bank regulator
+    (here, the FDIC) instead of the SEC, so EDGAR has no 10-Ks for it (D-017).
+    """
+    if not path.exists():
+        return {}
+    entries = {}
+    with open(path, newline="", encoding="utf-8") as f:
+        for line_number, row in enumerate(csv.DictReader(f), start=2):
+            ticker = normalize_ticker(row.get("ticker") or "")
+            if not ticker:
+                continue
+            if not (row.get("reason") or "").strip() or not (row.get("evidence") or "").strip():
+                raise ValueError(f"{path.name} line {line_number}: {ticker} needs both a reason and evidence")
+            entries[ticker] = {"title": row.get("company_name", ""), "reason": row["reason"]}
+    return entries
 
 
 def load_wikipedia_ciks(current_list_csv: Path) -> dict[str, int]:
@@ -99,13 +126,18 @@ def map_tickers(
     sec_map: dict[str, dict],
     manual_map: dict[str, dict],
     wikipedia_ciks: dict[str, int],
+    not_on_edgar: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Decide the CIK for each ticker and record where the answer came from."""
+    not_on_edgar = not_on_edgar or {}
     rows = []
     for ticker in sorted(tickers):
         notes = []
         if ticker in manual_map:
             cik, source, title = manual_map[ticker]["cik"], "manual", manual_map[ticker]["title"]
+        elif ticker in not_on_edgar:
+            cik, source, title = None, "not_on_edgar", not_on_edgar[ticker]["title"]
+            notes.append(not_on_edgar[ticker]["reason"])
         elif ticker in sec_map:
             cik, source, title = sec_map[ticker]["cik"], "sec_current", sec_map[ticker]["title"]
         elif ticker in wikipedia_ciks:
@@ -140,8 +172,9 @@ def run_ticker_mapping(
 
     sec_map = load_sec_ticker_map(client, raw_dir, refresh=settings["sec"]["refresh_submissions"])
     manual_map = load_manual_map(reference_dir / "manual_cik_map.csv")
+    not_on_edgar = load_not_on_edgar(reference_dir / "not_on_edgar.csv")
     wikipedia_ciks = load_wikipedia_ciks(current_list_csv)
-    rows = map_tickers(tickers, sec_map, manual_map, wikipedia_ciks)
+    rows = map_tickers(tickers, sec_map, manual_map, wikipedia_ciks, not_on_edgar)
 
     conn.execute("DELETE FROM ticker_map")
     conn.executemany(
@@ -153,7 +186,7 @@ def run_ticker_mapping(
     # Report the unmapped ones, most important (longest in the index) first.
     unmapped = []
     for row in rows:
-        if row["cik"] is None:
+        if row["source"] == "unmapped":
             days = membership.member_days({row["sec_ticker"]}, window_start, window_end)
             periods = [f"{s} to {e or 'present'}" for s, e in membership.periods_by_ticker[row["sec_ticker"]]]
             unmapped.append({"ticker": row["sec_ticker"], "member_days_in_window": days, "membership_periods": "; ".join(periods)})

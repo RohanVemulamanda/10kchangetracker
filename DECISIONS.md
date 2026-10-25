@@ -90,6 +90,17 @@ Every choice that could change the results is recorded here: what we chose, what
 - **Chose:** Company filing lists are downloaded once and reused. Set `refresh_submissions: true` to fetch them again.
 - **Why:** This is fine for historical work. Phase 5 (live updates) will need to refresh.
 
+### D-017 Companies whose 10-Ks aren't on EDGAR
+- **Chose:** List them in `data/reference/not_on_edgar.csv` with a reason and evidence. Report them separately from unmapped tickers, and exclude them from the sample.
+- **Who:** Signature Bank (SBNY) and First Republic Bank (FRC). Both were banks with no holding company. A bank like that files its Exchange Act reports with its bank regulator (here, the FDIC) instead of the SEC, so EDGAR has none of their 10-Ks. SBNY is confirmed by its own press release; FRC is to be confirmed by hand on EDGAR.
+- **Could affect results by:** Both banks failed in March–May 2023, so their late risk-factor sections probably changed a lot. Leaving them out removes likely "big changers" that then crashed. That **biases the test against finding the Lazy Prices effect**, though only slightly: it's 2 firms out of roughly 600. SVB Financial Group, the third failed bank, did have a holding company and is in the sample.
+
+### First real run: ticker mapping results (2026-10-24)
+- 615 tickers were in the index at some point since 2021-06-01. 553 mapped through SEC's ticker file, 2 through Wikipedia, and 60 could not be mapped automatically.
+- Of the 60: 58 were mapped by hand in `manual_cik_map.csv`. Each row cites a 10-K on sec.gov filed under that CIK, and a unit test checks that every cited link's CIK matches the CIK column. The other 2 are the FDIC filers (D-017).
+- The 58 were acquisitions (Twitter, Xilinx, Activision, ...), renames (FB→META, ANTM→ELV, VIAC→PARA, ...), and companies taken private or merged in 2024–2026 (Hess, Juniper, Discover, Walgreens, ...).
+- After re-running, each hand mapping is checked automatically (D-009: a 10-K filed during membership), and the summary prints SEC's own company name next to ours for a by-eye check.
+
 ---
 
 ## Known limitations (to disclose)
@@ -101,7 +112,9 @@ Every choice that could change the results is recorded here: what we chose, what
 5. **Combined filings.** A few groups (often utilities) file one 10-K covering a parent and its subsidiaries. We key it to the CIK of the index member.
 
 ## Open items before Phase 4
-- [ ] Resolve every ticker in `reports/unmapped_tickers.csv`
+- [x] Resolve every ticker in `reports/unmapped_tickers.csv` (58 mapped by hand, 2 not on EDGAR)
+- [ ] Re-run and confirm all 58 hand mappings pass the automatic check and the names match
+- [ ] Confirm by hand that First Republic Bank has no 10-Ks on EDGAR
 - [ ] Review the `suspicious_mapping` rows in `reports/gaps.csv`
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)

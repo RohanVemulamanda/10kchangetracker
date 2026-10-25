@@ -55,6 +55,9 @@ class EndToEnd(unittest.TestCase):
             "INSERT INTO ticker_map (sec_ticker, cik, source) VALUES (?, ?, ?)",
             [("ACME", 1, "sec_current"), ("NEWCO", 2, "sec_current"), ("META", 3, "sec_current"), ("FB", None, "unmapped")],
         )
+        self.conn.execute("INSERT INTO membership VALUES ('BANK', 'BANK', '2010-01-01', '2023-03-15')")
+        self.conn.execute("INSERT INTO ticker_map (sec_ticker, cik, source, sec_title, note) "
+                          "VALUES ('BANK', NULL, 'not_on_edgar', 'Some Bank', 'files with the FDIC')")
         self.conn.commit()
 
         routes = {}
@@ -98,7 +101,8 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(len(self.session.requested), requests_before)    # nothing downloaded again
 
         text = write_summary(self.conn, self.settings, self.reports, Path(self.settings["paths"]["reference_dir"]))
-        self.assertIn("**Unmapped tickers: 1**", text)
+        self.assertIn("**Unmapped tickers: 1**", text)       # FB only; BANK is counted separately
+        self.assertIn("**Not on EDGAR: 1**", text)
         self.assertIn("FB", text)
         self.assertIn("| 2022 | 3 |", text)  # three companies sampled in FY2022
         gaps = (self.reports / "gaps.csv").read_text(encoding="utf-8")

@@ -52,7 +52,15 @@ def write_summary(conn: sqlite3.Connection, settings: dict, reports_dir: Path, r
     add(f"- Tickers in the index at some point since {window_start}: {total_tickers}")
     for source, n in sorted(mapping.items()):
         add(f"  - {source}: {n}")
-    unmapped = [r["sec_ticker"] for r in conn.execute("SELECT sec_ticker FROM ticker_map WHERE cik IS NULL")]
+    not_on_edgar = conn.execute("SELECT sec_ticker, sec_title, note FROM ticker_map WHERE source = 'not_on_edgar'").fetchall()
+    if not_on_edgar:
+        add(f"- **Not on EDGAR: {len(not_on_edgar)}** (excluded; their 10-Ks were filed with another regulator, D-017)")
+        for r in not_on_edgar:
+            days = membership.member_days({r["sec_ticker"]}, window_start, window_end)
+            add(f"  - {r['sec_ticker']} {r['sec_title']} ({days} member days): {r['note']}")
+            gaps.append({"gap_type": "not_on_edgar", "cik": None, "company": r["sec_title"], "ticker": r["sec_ticker"],
+                         "accession_number": None, "fiscal_year": None, "detail": r["note"]})
+    unmapped = [r["sec_ticker"] for r in conn.execute("SELECT sec_ticker FROM ticker_map WHERE source = 'unmapped'")]
     unmapped_days = sorted(((membership.member_days({t}, window_start, window_end), t) for t in unmapped), reverse=True)
     if unmapped:
         top = ", ".join(f"{t} ({d}d)" for d, t in unmapped_days[:15])
@@ -100,6 +108,20 @@ def write_summary(conn: sqlite3.Connection, settings: dict, reports_dir: Path, r
     add(f"- Companies in the index a year or more with no sample 10-K: {len(no_sample)}")
     for r in no_sample[:20]:
         add(f"  - CIK {r['cik']} {r['name_current']}")
+
+    # Hand-entered mappings: show SEC's own name for each CIK so a wrong number stands out.
+    manual = conn.execute(
+        "SELECT t.sec_ticker, t.cik, t.sec_title, c.name_current, c.mapping_check FROM ticker_map t "
+        "LEFT JOIN companies c ON c.cik = t.cik WHERE t.source = 'manual' ORDER BY t.sec_ticker").fetchall()
+    if manual:
+        checked = [r for r in manual if r["name_current"]]
+        flagged = [r for r in checked if r["mapping_check"]]
+        add(f"- Hand-entered mappings: {len(manual)} ({len(checked)} checked against SEC so far, {len(flagged)} flagged)."
+            " Compare the two names on each line:")
+        for r in manual:
+            sec_name = r["name_current"] or "(filing list not downloaded yet)"
+            flag = "  <-- CHECK" if r["mapping_check"] else ""
+            add(f"  - {r['sec_ticker']} -> CIK {r['cik']}: ours \"{r['sec_title']}\" | SEC \"{sec_name}\"{flag}")
     notes = conn.execute("SELECT cik, name_current, selection_notes FROM companies WHERE selection_notes IS NOT NULL").fetchall()
     if notes:
         add(f"- Fiscal-year label clashes (both filings kept): {len(notes)}")

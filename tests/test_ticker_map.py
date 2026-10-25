@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from helpers import make_client, ok
-from tracker.ticker_map import SEC_TICKERS_URL, load_manual_map, load_sec_ticker_map, map_tickers
+from tracker.ticker_map import SEC_TICKERS_URL, load_manual_map, load_not_on_edgar, load_sec_ticker_map, map_tickers
 
 SEC_MAP = {"AAPL": {"cik": 320193, "title": "Apple Inc."}, "META": {"cik": 1326801, "title": "Meta Platforms"}}
 
@@ -49,6 +49,46 @@ class ManualFile(unittest.TestCase):
 
     def test_missing_file_means_no_fixes(self):
         self.assertEqual(load_manual_map(Path("does/not/exist.csv")), {})
+
+    def test_every_row_needs_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "manual.csv"
+            path.write_text("ticker,cik,company_name,evidence\nXYZ,123,Some Co,\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_manual_map(path)
+
+
+class NotOnEdgar(unittest.TestCase):
+    def test_listed_company_is_excluded_not_guessed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "not_on_edgar.csv"
+            path.write_text('ticker,company_name,reason,evidence\nSBNY,Signature Bank,"files with the FDIC","press release"\n',
+                            encoding="utf-8")
+            entries = load_not_on_edgar(path)
+        rows = {r["sec_ticker"]: r for r in map_tickers({"SBNY", "AAPL"}, SEC_MAP, {}, {}, entries)}
+        self.assertEqual((rows["SBNY"]["cik"], rows["SBNY"]["source"]), (None, "not_on_edgar"))
+        self.assertIn("FDIC", rows["SBNY"]["note"])
+        self.assertEqual(rows["AAPL"]["source"], "sec_current")
+
+    def test_reason_and_evidence_are_required(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "not_on_edgar.csv"
+            path.write_text("ticker,company_name,reason,evidence\nSBNY,Signature Bank,,\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_not_on_edgar(path)
+
+
+class ProjectMappingFiles(unittest.TestCase):
+    """Checks on the real hand-made files in data/reference/."""
+    REF = Path(__file__).resolve().parents[1] / "data" / "reference"
+
+    def test_files_load_and_evidence_links_match_the_cik(self):
+        import re
+        manual = load_manual_map(self.REF / "manual_cik_map.csv")
+        load_not_on_edgar(self.REF / "not_on_edgar.csv")
+        for ticker, row in manual.items():
+            for url_cik in re.findall(r"edgar/data/0*(\d+)/", row["evidence"]):
+                self.assertEqual(int(url_cik), row["cik"], f"{ticker}: evidence link points to a different CIK")
 
 
 if __name__ == "__main__":
