@@ -178,6 +178,10 @@ def _is_end(title: str, extra_titles: set[str]) -> bool:
 
 
 def is_end_title(block: Block, extra_titles: set[str]) -> bool:
+    if re.match(r"^\s*[“\"‘']", block.text):
+        # A title in quotation marks is a cross-reference, not a heading: Morgan Stanley 2025 has
+        # a line starting “Quantitative and Qualitative Disclosures about Risk—Legal...” herein.
+        return False
     whole = title_of(block.text)
     if _is_end(whole, extra_titles) or whole in END_TITLES_OTHER:
         return True

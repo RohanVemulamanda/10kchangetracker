@@ -67,6 +67,12 @@ class Ends(unittest.TestCase):
                      RISK_TEXT, "Legal Proceedings")
         self.assertEqual(find_by_heading(blocks).end, 4)
 
+    def test_quoted_title_does_not_end_the_section(self):  # Morgan Stanley 2025, after a page break
+        blocks = doc("Risk Factors", RISK_TEXT, "61",
+                     ("“Quantitative and Qualitative Disclosures about Risk—Legal, Regulatory and Compliance Risk” herein.",
+                      {"page_break_before": True}), RISK_TEXT, "Cybersecurity")
+        self.assertEqual(find_by_heading(blocks).end_text, "Cybersecurity")
+
     def test_names_item(self):
         self.assertTrue(names_item("Part I Item 1A & 1B", (1, "a")))
         self.assertTrue(names_item("Item 1(a) Risk Factors", (1, "a")))
