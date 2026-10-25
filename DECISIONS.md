@@ -267,6 +267,17 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 - **Known small error:** in some filings the full section's short introduction or its first category heading is removed along with the summary (one line). It happens the same way every year for a company, so its effect on change scores is small.
 - **Could affect results by:** a summary we don't detect (no "summary" heading, or one outside the first 1,500 words) stays in. If a company adds one, its main score shows a fake change in that year. The robustness score shows how much this matters overall.
 
+### D-030 Four similarity measures
+- **Chose:** all four measures from *Lazy Prices*, each from 0 (nothing in common) to 1 (identical), with change = 1 − similarity. Cosine is the main measure; Phase 4 checks whether results hold on all four. Code: `src/tracker/similarity.py`.
+  - **Cosine:** cosine of the angle between the two word-count vectors.
+  - **Jaccard:** distinct words in both years ÷ distinct words in either.
+  - **Minimum edit:** 1 − (fewest word insertions, deletions and substitutions to turn last year's words into this year's) ÷ (words in the longer year). Dividing by the longer length keeps it between 0 and 1.
+  - **Simple:** the two years' sentences are lined up in order, like Word's "track changes". 1 − (words in added and removed sentences) ÷ (words in both years). A sentence whose only change is a number or punctuation counts as kept; a sentence that moved counts as removed and added.
+- **Considered:** cosine and Jaccard only. Less code, but nothing to check the main result against.
+- **How it was checked:** tests with answers worked out by hand on a two-sentence example, identical text (all 1) and unrelated text (all 0). The fast edit-distance code matches the textbook version on 300 random cases. Timing: 0.3–0.6 seconds for a typical pair, 16 seconds for KKR (70,000 words).
+- **Note on the exact formulas:** these follow our understanding of the paper. In particular, how the paper scales minimum edit and simple similarity to 0–1 hasn't been checked against its text yet (open item).
+- **Early warning to check on the full run:** with common words kept, cosine is 0.999 for Apple and Micron FY2024 and 1.000 for KKR, because counts of "the", "and", "of" dominate the vectors. If cosine barely varies across companies, it may hardly separate them, and this choice (D-028) should be revisited.
+
 ---
 
 ## Known limitations (to disclose)
