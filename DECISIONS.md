@@ -232,7 +232,7 @@ A small cleanup: a bare number in front of a title is no longer removed unless a
 - Many have a visible reason in the text itself, such as a deal that year: Interpublic (the merger), Paramount (Skydance), Exelon (the separation plan), Waters (the BDS acquisition), Keurig Dr Pepper (the planned separation) and Healthpeak (the "Combined Company"). Others look like rewrites (Vertex, Occidental, KKR, Starbucks).
 - 26 are real changes in the text. The other, Morgan Stanley 2025, was the v1.2 error above.
 
-**Known issue, not fixed:** in about 6% of sections, some sentences are split across lines, because the 10-K puts each printed line in its own HTML element and the lines are too long for the v1.1 rejoining rule (Vertex 2025, for example). Word counts and the words themselves are unaffected.
+**Known issue, not fixed:** in about 6% of sections, some sentences are split across lines, because the 10-K puts each printed line in its own HTML element and the lines are too long for the v1.1 rejoining rule (Vertex 2025, for example). Word counts and the words themselves are unaffected. **Decision:** the saved text keeps the 10-K's line breaks. Phase 3 will split text into sentences in a way that ignores line breaks, so this can't affect change scores. (The other option, a new rejoining rule now, could wrongly join headings to paragraphs and would need another run and review.)
 
 ---
 
@@ -257,5 +257,6 @@ A small cleanup: a bare number in front of a title is no longer removed unless a
 - [x] Phase 2: review `reports/phase2_length_changes.csv` (27 cases; 26 real, Morgan Stanley fixed in v1.3)
 - [ ] Phase 2: re-run with v1.3; expect exactly one change (Morgan Stanley 2025, back to 10,574 words)
 - [ ] Phase 2: hand-review 20 random extractions and every remaining flagged case
+- [ ] Phase 3: sentence splitting must ignore line breaks (D-027 known issue)
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)
