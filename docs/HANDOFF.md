@@ -7,7 +7,20 @@ Read this first. Then read README.md and DECISIONS.md.
 - **Phase 0–1 (data collection): done.** 2,494 sample 10-Ks (fiscal 2021–2025, S&P 500 members on the filing date) plus 552 prior-year comparisons, all downloaded. See [phase1_report.md](phase1_report.md).
 - **Phase 2 (Item 1A extraction): done.** Extractor version 1.3 extracts all 2,494 sample filings. See [phase2_report.md](phase2_report.md).
 - **Phase 3 (change scores): done.** Scorer version 1.1 scores 2,482 of 2,494 sample 10-Ks on four similarity measures, with risk summaries removed (main) and kept (robustness), plus Loughran–McDonald word counts. See [phase3_report.md](phase3_report.md).
-- **Phase 4 (backtest): not started.** Next step: write the plan and ask Rohan the open questions before building anything.
+- **Phase 4 (backtest): paused, waiting for WRDS access** (Rohan requested it 2026-10-25). Done so far:
+  - the test design, fixed in advance and committed before any returns were seen (D-033);
+  - pinned Fama–French factors (D-035);
+  - the portfolio and statistics code, tested on made-up data.
+
+  **When the WRDS file arrives:**
+  1. Look at the real CRSP tables first. The new "CIZ" format (`crsp.msf_v2`) may be needed, because the old `crsp.msf` may have stopped at the end of 2024.
+  2. Link SEC company IDs to CRSP stock IDs through Compustat (`comp.company.cik` → `crsp.ccmxpf_lnkhist`).
+  3. Build the returns table described in `src/tracker/portfolios.py`, including delisting returns.
+  4. Run the main test exactly as D-033 says, then the robustness checks, then the hold-out once.
+  5. Report everything, whatever it shows.
+
+  If WRDS is refused, Rohan picks between a paid source and Yahoo (D-034).
+- **Phase 5 (live tool and dashboard): next.** Being planned while Phase 4 waits for data.
 
 ## How Rohan works
 
