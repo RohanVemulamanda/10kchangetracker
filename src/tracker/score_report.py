@@ -92,7 +92,7 @@ def write_phase3_summary(conn: sqlite3.Connection, cconn: sqlite3.Connection, re
             "|---|---|---|---|---|---|---|"]
     for _, r in ok_main.nsmallest(15, "sim_cosine").iterrows():
         out.append(f"| {r.company} | {r.fiscal_year} | {r.sim_cosine:.3f} | {r.sim_jaccard:.3f} | {r.sim_min_edit:.3f} | "
-                   f"{r.sim_simple:.3f} | {r.prior_words:,} -> {r.current_words:,} |")
+                   f"{r.sim_simple:.3f} | {int(r.prior_words):,} -> {int(r.current_words):,} |")
 
     text = "\n".join(out) + "\n"
     (reports_dir / "phase3_summary.md").write_text(text, encoding="utf-8")
