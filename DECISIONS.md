@@ -93,7 +93,7 @@ Every choice that could change the results is recorded here: what we chose, what
 
 ### D-017 Companies whose 10-Ks aren't on EDGAR
 - **Chose:** List them in `data/reference/not_on_edgar.csv` with a reason and evidence. Report them separately from unmapped tickers, and exclude them from the sample.
-- **Who:** Signature Bank (SBNY) and First Republic Bank (FRC). Both were banks with no holding company. A bank like that files its Exchange Act reports with its bank regulator (here, the FDIC) instead of the SEC, so EDGAR has none of their 10-Ks. SBNY is confirmed by its own press release; FRC is to be confirmed by hand on EDGAR.
+- **Who:** Signature Bank (SBNY) and First Republic Bank (FRC). Both were banks with no holding company. A bank like that files its Exchange Act reports with its bank regulator (here, the FDIC) instead of the SEC, so EDGAR has none of their 10-Ks. SBNY is confirmed by its own press release. FRC was confirmed by hand on 2026-10-24: an EDGAR company search for "First Republic Bank" (10-K filers) returns only two mortgage pass-through trusts from 2000, not the bank.
 - **Could affect results by:** Both banks failed in March–May 2023, so their late risk-factor sections probably changed a lot. Leaving them out removes likely "big changers" that then crashed. That **biases the test against finding the Lazy Prices effect**, though only slightly: it's 2 firms out of roughly 600. SVB Financial Group, the third failed bank, did have a holding company and is in the sample.
 
 ### First real run: ticker mapping results (2026-10-24)
@@ -112,6 +112,12 @@ Every choice that could change the results is recorded here: what we chose, what
 - **Could affect results by:** without this, about 10 sample 10-Ks from four large companies would be missing, and the four first-year comparisons would be lost.
 - **Phase 5 note:** live updates must also look up the old ID when a ticker moves to a new one.
 
+### D-019 Spin-offs, IPOs and new merged companies: first year unscored
+- **Chose (option A):** a company's first-ever 10-K has no prior-year comparison, so it is not scored. Its later years are scored normally.
+- **Considered (option B):** comparing the first 10-K with the parent's or merger partner's 10-K.
+- **Why:** the change score measures how a company rewrote *its own* report. A parent's 10-K is a different company's document, so the score would mostly measure "different company," not "changed language." Option A is simple to explain and loses little.
+- **Affected:** 12 of 2,495 sample filings (0.5%): Organon, Constellation Energy, GE HealthCare, Kenvue, Solventum, Veralto, GE Vernova, Smurfit Westrock, Amentum, Paramount Skydance, Qnity, FedEx Freight.
+
 ---
 
 ## Known limitations (to disclose)
@@ -125,9 +131,9 @@ Every choice that could change the results is recorded here: what we chose, what
 ## Open items before Phase 4
 - [x] Resolve every ticker in `reports/unmapped_tickers.csv` (58 mapped by hand, 2 not on EDGAR)
 - [x] Re-run and confirm all 58 hand mappings pass the automatic check and the names match
-- [ ] Confirm by hand that First Republic Bank has no 10-Ks on EDGAR
+- [x] Confirm by hand that First Republic Bank has no 10-Ks on EDGAR
 - [x] Review the `suspicious_mapping` rows in `reports/gaps.csv` (Exxon: fixed by D-018)
-- [ ] Re-run with `predecessors.csv` and confirm Exxon, BlackRock, Bunge and APA are complete
-- [ ] Decide how to treat spin-offs and mergers with no prior 10-K (D-018 default: first year unscored)
+- [x] Re-run with `predecessors.csv` and confirm Exxon, BlackRock, Bunge and APA are complete (+8 sample, +4 comparison filings, as predicted)
+- [x] Decide how to treat spin-offs and mergers with no prior 10-K: first year left unscored (D-019)
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)

@@ -9,7 +9,7 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**.
 | Phase | What | Status |
 |---|---|---|
 | 0 | Project setup | Done |
-| 1 | Download 10-Ks for historical S&P 500 members | Built and tested on fake data; **first real run pending** |
+| 1 | Download 10-Ks for historical S&P 500 members | **Done**: 2,495 sample + 553 comparison 10-Ks, verified ([report](docs/phase1_report.md)) |
 | 2 | Extract Item 1A (Risk Factors) | Not started |
 | 3 | Change scores | Not started |
 | 4 | Backtest | Not started |
