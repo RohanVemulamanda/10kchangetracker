@@ -1,0 +1,47 @@
+# ============================================================
+# 10-K Change Tracker — settings
+# Every research choice that might change lives here, not in the code.
+# Each choice is explained in DECISIONS.md (the D-numbers below point there).
+# ============================================================
+
+paths:
+  db: data/tracker.db                 # SQLite database: filing list + download status
+  raw_dir: data/raw                   # cached SEC downloads (gzip-compressed)
+  reference_dir: data/reference       # S&P membership, manual ticker fixes
+  reports_dir: reports                # summary reports (small, committed to git)
+  logs_dir: logs                      # one log file per run
+
+# --- Which companies (D-001) ---
+universe:
+  name: sp500_historical
+  source_repo: https://github.com/fja05680/sp500
+  # Pinned to one exact version of the source so results can be reproduced.
+  # Updated 2026-09-07; membership data runs through 2026-08-18.
+  source_commit: a2430f2af0c79ddf0748e91de11bdeb1616ab5a7
+  historical_file: "S&P 500 Historical Components & Changes (Updated).csv"
+  current_file: "sp500.csv"           # today's list from Wikipedia, incl. CIKs (used as a cross-check)
+
+# --- Which filings (D-002 to D-007) ---
+sample:
+  # Fiscal years whose 10-Ks we score. The prior-year 10-K for each one is
+  # downloaded too, as the comparison (so FY2020 10-Ks get downloaded as well).
+  start_fiscal_year: 2021
+  end_fiscal_year: 2025
+  form: "10-K"                        # originals only; 10-K/A and 10-KT are excluded
+  # A prior 10-K counts as a normal "one year earlier" comparison if its
+  # period ended between these many days before. Anything else gets flagged.
+  prior_year_min_days: 300
+  prior_year_max_days: 430
+
+# --- What to download for each filing (D-011) ---
+download:
+  exhibit_13: true                    # also fetch EX-13 (annual report exhibits)
+
+# --- Being polite to SEC servers (D-014) ---
+sec:
+  requests_per_second: 5              # SEC's cap is 10; we stay at half
+  max_retries: 5                      # per request, for temporary errors (429, 5xx, timeouts)
+  timeout_seconds: 30
+  stop_after_consecutive_403: 3       # 403 = SEC refusing us; stop instead of hammering
+  max_download_attempts: 3            # across runs, before a filing stays "failed"
+  refresh_submissions: false          # true = re-download company filing lists (needed to pick up new filings)

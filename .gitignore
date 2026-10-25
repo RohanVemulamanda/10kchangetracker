@@ -1,0 +1,32 @@
+# --- Secrets: your name and email for the SEC User-Agent live here ---
+.env
+
+# --- Downloaded and generated data (large; can always be re-created) ---
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/reference/sources/*
+!data/reference/sources/.gitkeep
+data/*.db
+data/*.db-journal
+
+# --- Logs ---
+logs/*
+!logs/.gitkeep
+
+# --- Python clutter ---
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Half-written downloads (only exist if a run is interrupted) ---
+*.part
