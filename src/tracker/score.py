@@ -29,7 +29,7 @@ from .textprep import words
 log = logging.getLogger(__name__)
 
 # Bump this whenever the scoring rules change. Rows made by an older version get redone.
-SCORER_VERSION = "1.0"
+SCORER_VERSION = "1.1"   # 1.1: a bare "Summary" heading starts a summary; overrides match whole lines (D-029)
 
 VERSIONS = ("main", "with_summary")
 

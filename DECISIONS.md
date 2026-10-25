@@ -251,7 +251,7 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 
 ### D-029 Risk factor summaries: removed for the main score, kept for a robustness score
 - **Why:** since 2020 the SEC asks for a summary of the risk factors (at most 2 pages) when they run over 15 pages. Many companies put it at the top of Item 1A. It repeats the risk headings, so that text would count twice. The year a company adds one, the section looks changed although nothing in the business did. Every pair is scored twice: the **main score with summaries removed**, and a **robustness score with them kept**, so Phase 4 can show the choice doesn't drive the results.
-- **How it's found** (`src/tracker/risk_summary.py`): the start is a short heading containing "summary" and "risk" in the first 1,500 words. The end is the first of:
+- **How it's found** (`src/tracker/risk_summary.py`): the start is a short heading containing "summary" and "risk", or a bare "Summary" heading, in the first 1,500 words. The end is the first of:
   - the full section starting over with one of the summary's first 3 lines or its first category heading (Micron, Crown Castle, Gallagher);
   - "For a more complete discussion..." / "the risks summarized above" (the summary's last line);
   - "You should carefully consider..." (the full section's introduction);
@@ -262,8 +262,13 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 - **How the rules were built:** a summary heading appears in 431 of the 3,046 sections (11% of FY2020 sections, about 19% by FY2024–2025, so not a one-time 2020–2021 effect). Each rule was added for a real case, then run on all 431, and every filing whose result changed was looked at. Rules we tried and rejected:
   - "Any short line repeated from the summary." Alexandria repeats a closing sentence after each group, so this cut its summary short.
   - "Any category heading that never appears again." This cut 90 summaries short, Regeneron after 6 lines, because many companies word their category headings differently in the summary and in the full section.
-- **Result:** the end is found for 421 of 431. For the other 8 (Alexandria FY2020–2025, Kenvue FY2023–2024) the summary and the full section use different headings, so nothing is removed. Both companies have the summary every year, so it can't create a first-appearance jump; they are listed for review.
-- **Hand-checked override:** Gallagher FY2023 starts its full section with a reworded first risk, so the rules stop about 530 words late. No general rule fixes this without breaking other filings. `data/reference/summary_overrides.csv` gives the first line after the summary for Gallagher FY2023 and FY2022 (same layout, one line off), with evidence. An override that isn't found stops the run.
+- **Result (version 1.1, all 3,046 sections):** a summary heading appears in 480. The rules find the end for 469; overrides set it for 6 (3 of them where the rules found none). For the other 8 (Alexandria FY2020–2025, Kenvue FY2023–2024) the summary and the full section use different headings, so nothing is removed. Both companies have the summary every year, so it can't create a first-appearance jump; they are listed for review.
+- **Hand-checked overrides:** `data/reference/summary_overrides.csv` gives the whole first line after the summary, with evidence, for filings the rules get wrong and no general rule fixes without breaking others. An override that isn't found stops the run.
+  - Gallagher FY2023 starts its full section with a reworded first risk, so the rules stop about 530 words late. FY2022 has the same layout and is one line off.
+  - CVS FY2021 starts its full section with a heading that isn't in its summary ("Risks Related to COVID-19"), so the rules would remove about 1,000 words of real COVID-19 risk factors.
+  - Discover FY2020–2022: the full section starts at a heading no rule recognises, so nothing would be removed. FY2023–2024 are found by the rules, so without the overrides the FY2023 score would show a fake change.
+  - The match must be the whole line: Discover's summary bullet "The COVID-19 Pandemic: The pandemic has..." starts with the same words as its heading "The COVID-19 Pandemic".
+- **Update, scorer version 1.1 (found in the review of the first full run):** 69 sections have a summary under a bare "Summary" heading (JPMorgan, CVS, Amgen, BNY, ICE, Viatris, Northern Trust, PNC, Dentsply, Discover), which the first rule skipped because it required "risk" in the heading. Most companies have it every year, but for some it appears or disappears (Northern Trust from FY2022, PNC until FY2022, Dentsply until FY2023), which would show as a fake change. Every newly found summary was checked: the existing end rules handle all but CVS FY2021 and Discover FY2020–2022, which got overrides. Headings like "Overview" (Alexandria, Prudential, Digital Realty) are not treated as summaries.
 - **Known small error:** in some filings the full section's short introduction or its first category heading is removed along with the summary (one line). It happens the same way every year for a company, so its effect on change scores is small.
 - **Could affect results by:** a summary we don't detect (no "summary" heading, or one outside the first 1,500 words) stays in. If a company adds one, its main score shows a fake change in that year. The robustness score shows how much this matters overall.
 
@@ -294,6 +299,8 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 ---
 
 ## Known limitations (to disclose)
+
+0. **(Phase 2, found in the Phase 3 review)** General Mills FY2023's extraction stops 4 words early. The section's last sentence was split by a line break, leaving a line starting "Item 8 of this report.", which was read as the next section's header. It's the last sentence, so nothing else is lost.
 
 1. **Free price data drops delisted stocks.** Fixing membership doesn't fully fix survivorship bias. If a company went bankrupt, its 10-K may be in our data while its final price crash is missing. This needs WRDS/CRSP, or a clear disclosure. (Phase 4)
 2. **The S&P 500 is a hard test for this idea.** The paper used all U.S. firms, and its explanation is that investors don't pay attention. S&P 500 firms get more attention than almost any other stocks. A weaker effect here would not prove the effect is gone.

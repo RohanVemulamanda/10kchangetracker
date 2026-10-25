@@ -159,6 +159,20 @@ We may be unable to identify and complete acquisitions, investments, or developm
         found = find_summary(text)
         self.assertEqual((found.end, found.rule), (None, "too_long"))
 
+    def test_bare_summary_heading(self):
+        """JPMorgan FY2020: the heading is just "Summary"."""
+        text = lines(f"""
+Summary
+The following is a summary of the material risks.
+Regulatory: changes in laws may affect us;
+Market: market events may hurt us;
+The above summary is subject in its entirety to the full risk factors below.
+COVID-19 Pandemic
+{LONG}
+""")
+        found = find_summary(text)
+        self.assertEqual((found.start, found.end, found.rule), (0, 5, "refers_back"))
+
     def test_bare_heading_is_not_a_summary(self):
         """Williams FY2024: a "Summary of Risk Factors" heading with the full section right under it."""
         text = lines(f"""
@@ -198,6 +212,13 @@ class RemoveSummary(unittest.TestCase):
         cleaned, found = remove_summary(text, end_override="Risks Relating to our Business Generally")
         self.assertEqual(cleaned, "Risks Relating to our Business Generally\nFull.\nb;\nMore.")
         self.assertEqual(found.rule, "override")
+
+    def test_end_override_matches_the_whole_line(self):
+        """Discover FY2020: the bullet "The COVID-19 Pandemic: The pandemic..." is not the heading."""
+        text = ("Summary\nThe following is a summary.\nThe COVID-19 Pandemic: The pandemic has reshaped the economy.\n"
+                "Strategic: We must compete.\nThe COVID-19 Pandemic\nThe pandemic hurt us.")
+        cleaned, found = remove_summary(text, end_override="The COVID-19 Pandemic")
+        self.assertEqual(cleaned, "The COVID-19 Pandemic\nThe pandemic hurt us.")
 
     def test_end_override_that_is_not_found_is_an_error(self):
         with self.assertRaises(ValueError):

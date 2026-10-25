@@ -13,8 +13,8 @@ What a summary looks like (Micron FY2025, simplified):
     Risks Related to Our Business, Operations, and Industry   <- end: the full section begins
     Volatility in average selling prices ... may adversely affect our business.
 
-The start is a short heading (8 words or fewer) with "summary" and "risk" in it, within the
-first 1,500 words. The end is the first of these, scanning down from the start:
+The start is a short heading (8 words or fewer) with "summary" and "risk" in it, or a bare
+"Summary" heading (JPMorgan, CVS, Amgen, BNY), within the first 1,500 words. The end is the first of these, scanning down from the start:
   "repeat"       a line that repeats one of the summary's first 3 lines, or its first category
                  heading: the full section starts over where the summary started (Micron and
                  Crown Castle repeat their first category heading, Gallagher its first risk).
@@ -82,11 +82,18 @@ def is_category_heading(line: str) -> bool:
     return len(stripped.split()) <= 15 and CATEGORY_HEADING.match(stripped) is not None
 
 
+def is_summary_heading(line: str) -> bool:
+    """ "Risk Factor Summary", "Summary of Risk Factors", ... or just "Summary"."""
+    if re.fullmatch(r"summary\.?", line.strip(), re.IGNORECASE):
+        return True
+    return len(line.split()) <= 8 and re.search("summary", line, re.I) is not None and re.search("risk", line, re.I) is not None
+
+
 def find_summary(lines: list[str]) -> Summary | None:
     """Find the risk factor summary in a section's lines. None if there isn't one."""
     start, words_before = None, 0
     for i, line in enumerate(lines):
-        if len(line.split()) <= 8 and re.search("summary", line, re.I) and re.search("risk", line, re.I):
+        if is_summary_heading(line):
             start = i
             break
         words_before += len(line.split())
@@ -139,14 +146,16 @@ def remove_summary(text: str, end_override: str | None = None) -> tuple[str, Sum
     """Return the section text without its summary, and what was found.
     If a summary heading was found but not its end, the text is returned unchanged.
 
-    end_override: the start of the first line after the summary, checked by hand, for a filing
-    the rules get wrong (data/reference/summary_overrides.csv). It must be found, or it's an error.
+    end_override: the whole first line after the summary, checked by hand, for a filing the rules
+    get wrong (data/reference/summary_overrides.csv). It must be found, or it's an error. The whole
+    line must match: Discover's summary bullet "The COVID-19 Pandemic: The pandemic has..." starts
+    with the same words as the full section's heading "The COVID-19 Pandemic".
     """
     lines = text.split("\n")
     found = find_summary(lines)
     if end_override is not None:
         start = found.start if found else -1
-        end = next((j for j in range(start + 1, len(lines)) if lines[j].startswith(end_override)), None)
+        end = next((j for j in range(start + 1, len(lines)) if lines[j].strip() == end_override.strip()), None)
         if found is None or end is None:
             raise OverrideNotFound(f"summary override not found: {end_override!r}")
         found = Summary(found.start, end, "override")
