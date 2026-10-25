@@ -62,8 +62,11 @@ def step_check(settings: dict, client: EdgarClient) -> bool:
 
     company, filings = fetch_company_filings(client, 320193, p["raw_dir"], earliest_needed="2019-01-01")
     tenks = [f for f in filings if f.get("form") == "10-K"]
-    print(f"2. Submissions API: {company['name_current']}, SIC {company['sic_current']}, "
-          f"{len(filings):,} filings since 2019, {len(tenks)} original 10-Ks")
+    recent_tenks = [f for f in tenks if f.get("filingDate", "") >= "2019-01-01"]
+    oldest = min((f.get("filingDate", "") for f in filings), default="?")
+    print(f"2. Submissions API: {company['name_current']}, SIC {company['sic_current']}. "
+          f"Read {len(filings):,} filings going back to {oldest}; "
+          f"{len(recent_tenks)} original 10-Ks filed since 2019 ({len(tenks)} in all)")
     needed = ["accessionNumber", "filingDate", "reportDate", "acceptanceDateTime", "form", "primaryDocument"]
     missing = [k for k in needed if tenks and k not in tenks[0]]
     if not tenks or missing:
