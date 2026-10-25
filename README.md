@@ -11,7 +11,7 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**. Start
 | 0 | Project setup | Done |
 | 1 | Download 10-Ks for historical S&P 500 members | **Done**: 2,494 sample + 552 comparison 10-Ks, verified ([report](docs/phase1_report.md)) |
 | 2 | Extract Item 1A (Risk Factors) | **Done**: all 2,494 sample filings extracted; 20 of 20 correct in the hand review ([report](docs/phase2_report.md)) |
-| 3 | Change scores | **In progress**: text preparation, summary removal, the four measures and the scoring run are built; full run and review under way |
+| 3 | Change scores | **Done**: 2,482 of 2,494 sample 10-Ks scored on four measures (the other 12 are first-ever 10-Ks) ([report](docs/phase3_report.md)) |
 | 4 | Backtest | Not started |
 | 5 | Live tool and dashboard | Not started |
 
