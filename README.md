@@ -13,7 +13,7 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**. Start
 | 2 | Extract Item 1A (Risk Factors) | **Done**: all 2,494 sample filings extracted; 20 of 20 correct in the hand review ([report](docs/phase2_report.md)) |
 | 3 | Change scores | **Done**: 2,482 of 2,494 sample 10-Ks scored on four measures (the other 12 are first-ever 10-Ks) ([report](docs/phase3_report.md)) |
 | 4 | Backtest | **In progress**: test design fixed in advance (D-033); factors and portfolio code built; waiting for WRDS price data |
-| 5 | Live tool and dashboard | Not started |
+| 5 | Live tool and dashboard | **In progress**: `update` and the website are built; first live update done; not yet published |
 
 ## Setup (one time)
 
@@ -97,6 +97,18 @@ The test design is fixed in DECISIONS.md (D-033) before any returns are used. St
 
 **Risk factors (one-time download, D-035):** from Kenneth French's data library (https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html), download "Fama/French 5 Factors (2x3)" and "Momentum Factor (Mom)", monthly CSV zips. Save them unchanged in `data/reference/sources/ff/`. The pinned versions (August 2026 CRSP database) are fingerprinted in `config/settings.yaml`. A newer download will be refused until the fingerprints are updated on purpose, with a note in DECISIONS.md.
 
+## Running Phase 5 (live updates and the dashboard)
+
+```bash
+python run.py update          # new 10-Ks from today's S&P 500 members: find, download, extract, score (5-10 minutes)
+python run.py build-site      # write the dashboard to site/
+python run.py preview-site    # look at it on your Mac: open http://localhost:8000 (Ctrl+C to stop)
+```
+
+- Run `update` every week or two, especially in February and March, when most 10-Ks are filed.
+- New filings never change the research sample (DECISIONS.md D-036).
+- **After each update, check `reports/live_review.csv`.** New filings listed there (extraction problems, extreme changes, first-ever 10-Ks) stay off the dashboard. For each one, open the EDGAR link and check that the Risk Factors section was cut in the right place. If it's fine, add a row to `data/reference/live_approved.csv` with a short note, then run `build-site` again (D-037).
+
 ## Checking Phase 1 is correct
 
 1. **Hand-check 10 random filings.** Run `python run.py spot-check`. It prints 10 random downloaded filings with what we stored, plus a link to each one's EDGAR page. Open each link and compare the filing date, "Accepted" time, and "Period of Report" with our values.
@@ -145,6 +157,8 @@ src/tracker/             the code, one file per job:
   factors.py               Phase 4: Fama-French factors from Kenneth French's data library
   portfolios.py            Phase 4: monthly quintile portfolios by change score
   backtest_stats.py        Phase 4: alphas (Newey-West) and Fama-MacBeth regressions
+  live.py                  Phase 5: today's S&P 500 list, new filings, the review list
+  site.py                  Phase 5: builds the dashboard website (page files in site_assets/)
   score.py                 Phase 3: score every sample 10-K against its prior year
   score_report.py          Phase 3: summary, score list, review page
   pipeline.py              runs the steps in order
@@ -154,6 +168,7 @@ data/reference/          membership periods and hand-checked fixes (committed):
   not_on_edgar.csv         companies whose 10-Ks aren't on EDGAR
   predecessors.csv         companies that moved to a new SEC ID
   summary_overrides.csv    hand-checked risk-summary ends the rules get wrong
+  live_approved.csv        new filings checked by hand and cleared for the dashboard
 data/raw/                downloaded filings (not committed)
 data/tracker.db          SQLite database (not committed)
 reports/                 summaries and gap lists

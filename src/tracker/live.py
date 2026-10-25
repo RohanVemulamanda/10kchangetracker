@@ -9,7 +9,8 @@ adds new filings without touching it:
      on every date, which is only true for today, but live mode only looks at the newest filings;
   4. only filings not already in the database are added, marked role 'live' (scored) or
      'live_comparison' (prior year only). Rows with role 'sample' or 'comparison' are never changed,
-     so the research results can't move when the live data grows.
+     so the research results can't move when the live data grows. A live row's prior-year link is
+     updated if it changes (after a company is added to predecessors.csv, D-018).
 After that, the usual download, extraction and scoring steps pick up the new filings.
 """
 from __future__ import annotations
@@ -113,16 +114,20 @@ LIVE_COLUMNS = ["accession_number", "cik", "company_cik", "form", "filing_date",
 
 
 def live_rows(cik: int, filings: list[dict], tickers: set[str], start_fiscal_year: int, earliest_needed: str,
-              existing: set[str]) -> list[dict]:
-    """The new filings to add for one company: chosen by Phase 1's rules, minus any already stored."""
+              existing: dict[str, str]) -> tuple[list[dict], list[dict]]:
+    """For one company, chosen by Phase 1's rules: (filings to add, stored live filings whose
+    prior-year link changed). `existing` maps every stored accession number to its role."""
     always_member = Membership([{"sec_ticker": t, "start_date": "1900-01-01", "end_date": None} for t in tickers])
     result = select_filings(cik, filings, tickers, always_member, start_fiscal_year, 9999, earliest_needed)
-    rows = []
+    new, relinked = [], []
     for row in result.selected:
-        if row["accession_number"] in existing:
-            continue
-        rows.append({**row, "role": LIVE_ROLES[row["role"]]})
-    return rows
+        row = {**row, "role": LIVE_ROLES[row["role"]]}
+        stored_role = existing.get(row["accession_number"])
+        if stored_role is None:
+            new.append(row)
+        elif stored_role == "live" and row["role"] == "live":   # research rows are never touched
+            relinked.append(row)
+    return new, relinked
 
 
 def find_live_filings(conn: sqlite3.Connection, client: EdgarClient, members: list[dict], raw_dir: Path,
@@ -136,7 +141,7 @@ def find_live_filings(conn: sqlite3.Connection, client: EdgarClient, members: li
             tickers_by_cik.setdefault(m["cik"], set()).add(m["sec_ticker"])
     insert = (f"INSERT INTO filings ({', '.join(LIVE_COLUMNS)}, selected) "
               f"VALUES ({', '.join(':' + c for c in LIVE_COLUMNS)}, 1)")
-    counts = {"companies": len(tickers_by_cik), "failed_companies": 0, "live": 0, "live_comparison": 0}
+    counts = {"companies": len(tickers_by_cik), "failed_companies": 0, "live": 0, "live_comparison": 0, "relinked": 0}
     for i, (cik, tickers) in enumerate(sorted(tickers_by_cik.items()), start=1):
         try:
             company, filings = fetch_company_filings(client, cik, raw_dir, earliest_needed, refresh=True)
@@ -151,10 +156,18 @@ def find_live_filings(conn: sqlite3.Connection, client: EdgarClient, members: li
             log.error("Could not get the filing list for CIK %s: %s", cik, exc)
             counts["failed_companies"] += 1
             continue
-        existing = {r[0] for r in conn.execute("SELECT accession_number FROM filings")}
-        for row in live_rows(cik, filings, tickers, start_fiscal_year, earliest_needed, existing):
+        existing = dict(conn.execute("SELECT accession_number, role FROM filings").fetchall())
+        new, relinked = live_rows(cik, filings, tickers, start_fiscal_year, earliest_needed, existing)
+        for row in new:
             conn.execute(insert, {**row, "member_tickers": ",".join(sorted(tickers))})
             counts[row["role"]] += 1
+        for row in relinked:
+            changed = conn.execute("UPDATE filings SET prior_accession = :prior_accession, prior_gap_days = :prior_gap_days "
+                                   "WHERE accession_number = :accession_number AND role = 'live' "
+                                   "AND COALESCE(prior_accession, '') != COALESCE(:prior_accession, '')", row).rowcount
+            if changed:
+                log.info("CIK %s: %s now compares with %s", cik, row["accession_number"], row["prior_accession"])
+                counts["relinked"] += 1
         conn.execute(
             "INSERT INTO companies (cik, name_current, sic_current, sic_description, fiscal_year_end, tickers_current, "
             "submissions_status, updated_at) VALUES (:cik, :name_current, :sic_current, :sic_description, "
@@ -199,7 +212,10 @@ def review_reasons(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: s
         status, flags = extraction.get(row.accession_number, ("not_extracted", None))
         if status != "ok":
             why.append(f"extraction {status}" + (f" ({flags})" if flags else ""))
-        if row.status != "ok":
+        if row.status != "ok" and "D-019" in (row.note or ""):
+            why.append("first 10-K, so not scored (D-019): check it isn't a company that moved to a new SEC ID "
+                       "(add it to predecessors.csv, D-018), then approve it")
+        elif row.status != "ok":
             why.append(f"not scored: {row.note}")
         else:
             if row.flags:

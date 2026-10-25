@@ -51,16 +51,26 @@ class LiveRows(unittest.TestCase):
                tenk("fy25a", "2025-12-31", "2026-03-01", form="10-K/A")]
 
     def test_new_filing_added_as_live_with_its_prior(self):
-        rows = live_rows(1, self.FILINGS, {"ACME"}, 2021, "2019-01-01", existing={"fy24"})
-        self.assertEqual([(r["accession_number"], r["role"], r["prior_accession"], r["fiscal_year"]) for r in rows],
+        new, relinked = live_rows(1, self.FILINGS, {"ACME"}, 2021, "2019-01-01", existing={"fy24": "sample"})
+        self.assertEqual([(r["accession_number"], r["role"], r["prior_accession"], r["fiscal_year"]) for r in new],
                          [("fy25", "live", "fy24", 2025)])               # the amendment is left out (D-005)
+        self.assertEqual(relinked, [])
 
-    def test_filings_already_stored_are_never_touched(self):
-        self.assertEqual(live_rows(1, self.FILINGS, {"ACME"}, 2021, "2019-01-01", existing={"fy24", "fy25"}), [])
+    def test_research_rows_are_never_touched(self):
+        new, relinked = live_rows(1, self.FILINGS, {"ACME"}, 2021, "2019-01-01",
+                                  existing={"fy24": "sample", "fy25": "sample"})
+        self.assertEqual((new, relinked), ([], []))
+
+    def test_stored_live_rows_are_offered_for_relinking(self):
+        """After a company is added to predecessors.csv, its live filing gets a prior year (D-018)."""
+        new, relinked = live_rows(1, self.FILINGS, {"ACME"}, 2021, "2019-01-01",
+                                  existing={"fy24": "live_comparison", "fy25": "live"})
+        self.assertEqual(new, [])
+        self.assertEqual([(r["accession_number"], r["prior_accession"]) for r in relinked], [("fy25", "fy24")])
 
     def test_new_member_gets_its_history_and_first_comparison(self):
-        rows = live_rows(1, self.FILINGS, {"ACME"}, 2025, "2019-01-01", existing=set())
-        self.assertEqual({(r["accession_number"], r["role"]) for r in rows},
+        new, _ = live_rows(1, self.FILINGS, {"ACME"}, 2025, "2019-01-01", existing={})
+        self.assertEqual({(r["accession_number"], r["role"]) for r in new},
                          {("fy25", "live"), ("fy24", "live_comparison")})
 
 

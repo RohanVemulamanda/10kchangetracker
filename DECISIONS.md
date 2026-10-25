@@ -375,6 +375,23 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
   - its cosine or Jaccard similarity is below the research sample's 1st percentile. Changes that extreme are where extraction errors showed up in Phases 2–3.
 - **After checking one by hand,** add it to `data/reference/live_approved.csv` (accession number and a note); it then appears on the dashboard. A filing with real problems stays off until the rules are fixed.
 - **Why:** Phase 2's rules were tested on the research sample. A new layout can break them, and a broken extraction looks exactly like a big change: the thing the dashboard highlights.
+- **First live update (2026-10-25):** 174 new filings from 82 companies, mostly companies that joined the index after the research period (with their history from fiscal 2021) and fiscal 2026 10-Ks. The research sample was checked before and after: the same counts, and the same fingerprint of all 4,988 research scores. 18 went on the review list:
+  - **Ares and KKR (5):** the known "long" flag (D-026). Approved.
+  - **Flex 2025, Ciena 2025, EchoStar 2023:** extreme changes, all real (a heavy rewrite, a cut to a third, and the DISH merger). The boundaries were checked; approved.
+  - **10 first-ever 10-Ks:** 8 are real IPOs, spin-offs or mergers (Coinbase, Robinhood, Reddit, AppLovin, Sandisk, TKO, Apollo, CRH, which used Form 20-F before). Approved as unscored.
+  - **Marvell (2021) and Ferguson (2024)** were moves to a new legal parent (Bermuda → Delaware and Jersey → Delaware), the D-018 case. Both were added to `predecessors.csv` with evidence.
+- **Relinking:** live mode may update the prior-year link of a stored **live** row (never a research row), so a company added to `predecessors.csv` later gets its comparison. That's how Marvell and Ferguson get scored.
+
+### D-038 The dashboard: a static website
+- **Chose (Rohan's decision):** a static website built by `python run.py build-site` into `site/`, to be hosted on GitHub Pages: free, with no server to keep running, and shareable by link. The alternative, a Streamlit app, would only run on Rohan's Mac.
+- **What it shows:**
+  - **"Biggest rewrites" of the latest filing season,** ranked by cosine similarity. `voice_switch` filings (D-031) are left out of the ranking and labelled.
+  - **One page per company:** each year's change as a rank ("changed more than X% of S&P 500 10-Ks from fiscal 2021–2025"), the four scores, and the new and dropped sentences, with moved sentences left out (D-030). Links go to both filings on EDGAR.
+  - **A "how to read this" note,** and a backtest section marked pending until Phase 4 is done.
+- **Why a rank, not the raw score:** cosine sits between 0.98 and 1.00 for nearly every filing (D-030), and "0.9847" means nothing to a reader. The rank is computed against the research sample only, so it doesn't drift as live filings arrive.
+- **Not published:** the Loughran–McDonald counts (free for academic research only, D-032). Live filings on the review list (D-037) are held back until approved.
+- **Built safely:** no outside libraries; all text from filings is inserted as plain text, never as HTML, so nothing in a 10-K can run as code on the page. Data is split into one file per company (loaded when clicked), so the page stays fast.
+- **Publishing:** the built site goes on a separate `gh-pages` branch, not `main`. **Nothing is published until Rohan has looked at it locally and says so.**
 
 ---
 
