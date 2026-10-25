@@ -413,6 +413,7 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
     - **451 "new" (0.4%) and 387 "dropped" sentences** actually appeared elsewhere in the other year's section. The diff lines sentences up in order, so repeats and moves can slip through. "New" now means it appears nowhere in last year's section, and "dropped" nowhere in this year's. Re-checked: 0 left.
   - **Added for usefulness:** a plain-English explanation of each score on every company page ("What do these numbers mean?", also shown on hover), and a line saying the rank is based on cosine, the research's main measure.
 - **Publishing:** the built site goes on a separate `gh-pages` branch, not `main`. **Nothing is published until Rohan has looked at it locally and says so.**
+- **Published 2026-10-25, with Rohan's go-ahead:** https://rohanvemulamanda.github.io/10kchangetracker/. The `gh-pages` branch holds a single commit with the built site (no history), so the repository doesn't grow with each update. Rohan pushed it with a short-lived fine-grained token (Contents: Read and write on this repository only), deleted afterwards. Checked live: every file loads, search and company pages work, no console errors.
 
 ---
 

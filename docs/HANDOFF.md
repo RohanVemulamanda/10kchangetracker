@@ -20,10 +20,10 @@ Read this first. Then read README.md and DECISIONS.md.
   5. Report everything, whatever it shows.
 
   If WRDS is refused, Rohan picks between a paid source and Yahoo (D-034).
-- **Phase 5 (live tool and dashboard): built, not published.** `python run.py update` adds new 10-Ks without touching the research sample; `python run.py build-site` writes the dashboard to `site/`. See [phase5_report.md](phase5_report.md). **Next:**
-  1. Rohan looks at it (`python run.py preview-site`).
-  2. **Only with his explicit yes:** publish `site/` to a `gh-pages` branch and turn on GitHub Pages. This is a public step. Push the site as a single fresh commit each time, so 60 MB of data doesn't pile up in the repository's history.
-  3. After each `update`, check `reports/live_review.csv` and approve checked filings in `data/reference/live_approved.csv`.
+- **Phase 5 (live tool and dashboard): done and live** at https://rohanvemulamanda.github.io/10kchangetracker/ (published 2026-10-25 with Rohan's go-ahead). See [phase5_report.md](phase5_report.md). To keep it current:
+  1. `python run.py update`, then check `reports/live_review.csv` and approve checked filings in `data/reference/live_approved.csv`.
+  2. `python run.py build-site`.
+  3. Publish with the README's "Publishing an update" steps. Rohan pushes with a short-lived token; this session can't reach his Keychain.
 
 ## How Rohan works
 

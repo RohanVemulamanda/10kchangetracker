@@ -13,7 +13,7 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**. Start
 | 2 | Extract Item 1A (Risk Factors) | **Done**: all 2,494 sample filings extracted; 20 of 20 correct in the hand review ([report](docs/phase2_report.md)) |
 | 3 | Change scores | **Done**: 2,482 of 2,494 sample 10-Ks scored on four measures (the other 12 are first-ever 10-Ks) ([report](docs/phase3_report.md)) |
 | 4 | Backtest | **In progress**: test design fixed in advance (D-033); factors and portfolio code built; waiting for WRDS price data |
-| 5 | Live tool and dashboard | **Built, not published**: `update` and the website work; 176 live filings added ([report](docs/phase5_report.md)) |
+| 5 | Live tool and dashboard | **Done, live** at [rohanvemulamanda.github.io/10kchangetracker](https://rohanvemulamanda.github.io/10kchangetracker/) ([report](docs/phase5_report.md)) |
 
 ## Setup (one time)
 
@@ -108,6 +108,25 @@ python run.py preview-site    # look at it on your Mac: open http://localhost:80
 - Run `update` every week or two, especially in February and March, when most 10-Ks are filed.
 - New filings never change the research sample (DECISIONS.md D-036).
 - **After each update, check `reports/live_review.csv`.** New filings listed there (extraction problems, extreme changes, first-ever 10-Ks) stay off the dashboard. For each one, open the EDGAR link and check that the Risk Factors section was cut in the right place. If it's fine, add a row to `data/reference/live_approved.csv` with a short note, then run `build-site` again (D-037).
+
+### Publishing an update to the live site
+
+The dashboard is live at **https://rohanvemulamanda.github.io/10kchangetracker/**. After `update` and `build-site`, publish the new version like this:
+
+1. Make a GitHub token at https://github.com/settings/personal-access-tokens/new: "Only select repositories" → `10kchangetracker`; Repository permissions → **Contents: Read and write**; 7-day expiry. Don't copy it yet.
+2. In Terminal, run:
+   ```bash
+   rm -rf /tmp/10k-site && cp -R site /tmp/10k-site && touch /tmp/10k-site/.nojekyll
+   cd /tmp/10k-site && git init -q -b gh-pages && git add -A && git commit -q -m "Publish dashboard $(date +%F)"
+   ```
+3. Paste this, **but don't press Enter yet**:
+   ```bash
+   git push --force "https://RohanVemulamanda:$(pbpaste)@github.com/RohanVemulamanda/10kchangetracker.git" gh-pages:gh-pages
+   ```
+4. Copy the token on GitHub (copy button), go back to Terminal, and press Enter. The token is read from the clipboard and isn't saved anywhere.
+5. Delete the token on GitHub. The site updates within a minute or two.
+
+`--force` replaces the `gh-pages` branch with one fresh commit each time, so 60 MB of site data doesn't pile up in the repository's history. It never touches `main`.
 
 ## Checking Phase 1 is correct
 
