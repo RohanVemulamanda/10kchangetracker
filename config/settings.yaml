@@ -51,3 +51,11 @@ sec:
   stop_after_consecutive_403: 3       # 403 = SEC refusing us; stop instead of hammering
   max_download_attempts: 3            # across runs, before a filing stays "failed"
   refresh_submissions: false          # true = re-download company filing lists and SEC's ticker file (to pick up new filings)
+
+# --- What kind of language changed (D-032) ---
+word_lists:
+  # Loughran-McDonald Master Dictionary, March 2026 release (words from 10-Ks 1993-2025).
+  # Free for academic research; commercial use needs a license from the authors.
+  # Download by hand from https://sraf.nd.edu/loughranmcdonald-master-dictionary/ (see README).
+  lm_file: data/reference/sources/lm/LM_MasterDictionary_1993-2025.csv
+  lm_sha256: e2d1328682bab7d2187684fb9f5420bb730401c9eefc00daf835edd203f4859d

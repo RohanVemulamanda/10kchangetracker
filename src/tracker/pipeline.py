@@ -30,6 +30,7 @@ from .extract import connect_sections, run_extraction
 from .extract_report import write_phase2_summary, write_review_page
 from .score import connect_changes, run_scoring
 from .score_report import write_phase3_summary, write_score_review_page
+from .wordlists import WordListError, load_word_lists, measure_change_words
 from .header import api_minus_header_minutes, index_headers_url, parse_index_headers
 from .log_setup import setup_logging
 from .selection import mapping_problem, select_filings
@@ -282,6 +283,13 @@ def step_score(settings: dict, conn: sqlite3.Connection, tickers: list[str] | No
         ciks = _ciks_for_run(conn, tickers)[0] if tickers else None
         counts = run_scoring(conn, sconn, cconn, p["reference_dir"], ciks, force)
         log.info("Scoring done: %s", json.dumps(counts))
+        word_lists = settings["word_lists"]
+        lm_path = project_path(word_lists["lm_file"])
+        if lm_path.exists():
+            pairs = measure_change_words(cconn, load_word_lists(lm_path, word_lists["lm_sha256"]))
+            log.info("Word-list counts done for %d pairs (D-032)", pairs)
+        else:
+            log.warning("Word list not found (%s), so word-list counts were skipped. See README, 'Running Phase 3'.", lm_path)
         print("\n" + write_phase3_summary(conn, cconn, p["reports_dir"]))
     finally:
         sconn.close()
@@ -377,7 +385,7 @@ def run(command: str, tickers: list[str] | None = None, seed: int | None = None,
     except SecAccessDenied as exc:
         log.error(str(exc))
         return 2
-    except (RuntimeError, DownloadError) as exc:
+    except (RuntimeError, DownloadError, WordListError) as exc:
         log.error(str(exc))
         return 1
     except KeyboardInterrupt:

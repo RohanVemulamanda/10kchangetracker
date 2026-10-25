@@ -88,6 +88,7 @@ python run.py review-scores                  # writes reports/phase3_review.html
 - Four similarity measures, from 0 (nothing in common) to 1 (identical): cosine, Jaccard, minimum edit and simple (D-030). Change = 1 - similarity.
 - Results go to `data/processed/changes.db`: table `changes` (the scores), `changed_sentences` (what was added and removed) and `risk_summaries` (what summary removal did).
 - `reports/phase3_summary.md` has coverage, the spread of each measure and the biggest changes; `reports/phase3_scores.csv` has every score, for Excel; `reports/phase3_summaries.csv` lists every summary found.
+- **Word lists (one-time download):** open https://sraf.nd.edu/loughranmcdonald-master-dictionary/, download the Master Dictionary CSV (March 2026 release, file "1993-2025"), and save it as `data/reference/sources/lm/LM_MasterDictionary_1993-2025.csv`. `python run.py score` then counts negative, uncertain and litigious words in new and dropped sentences (table `change_words`, D-032). Without the file that step is skipped. The lists are free for academic research only.
 - A pair is scored again automatically if either year's text changes (for example after a new extraction). After changing the scoring rules, bump `SCORER_VERSION` in `src/tracker/score.py`.
 
 ## Checking Phase 1 is correct
@@ -134,6 +135,7 @@ src/tracker/             the code, one file per job:
   textprep.py              Phase 3: sentences and words (line breaks ignored)
   risk_summary.py          Phase 3: find and remove the risk factor summary
   similarity.py            Phase 3: the four similarity measures
+  wordlists.py             Phase 3: Loughran-McDonald word counts in new and dropped sentences
   score.py                 Phase 3: score every sample 10-K against its prior year
   score_report.py          Phase 3: summary, score list, review page
   pipeline.py              runs the steps in order

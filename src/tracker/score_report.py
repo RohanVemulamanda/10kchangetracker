@@ -90,6 +90,20 @@ def write_phase3_summary(conn: sqlite3.Connection, cconn: sqlite3.Connection, re
         out.append(f"- `{rule}`: {n:,}")
     out.append(f"- removed text containing a long paragraph (`long_line`, to check): {int(summaries.long_line.sum()):,}")
 
+    has_word_counts = cconn.execute("SELECT 1 FROM sqlite_master WHERE name = 'change_words'").fetchone()
+    if has_word_counts:
+        counts = pd.read_sql_query("SELECT * FROM change_words", cconn).merge(
+            ok_main[["accession_number", "fiscal_year"]], on="accession_number")
+        out += ["", "## What kind of language changed (D-032)", "",
+                "Loughran-McDonald words as a share of all words, in sentences that are genuinely new this year "
+                "and in sentences that were dropped (moved sentences are neither).", "",
+                "| Fiscal year | Text | Sentences | Words | Negative | Uncertainty | Litigious |",
+                "|---|---|---|---|---|---|---|"]
+        for (year, kind), g in counts.groupby(["fiscal_year", "kind"]):
+            total = g.words.sum()
+            shares = " | ".join(f"{100 * g[c].sum() / total:.2f}%" if total else "-" for c in ("negative", "uncertainty", "litigious"))
+            out.append(f"| {year} | {kind} | {g.sentences.sum():,} | {total:,} | {shares} |")
+
     out += ["", "## The 15 biggest changes (lowest cosine similarity, main version)", "",
             "| Company | Fiscal year | Cosine | Jaccard | Min edit | Simple | Words before -> after | Flag |",
             "|---|---|---|---|---|---|---|---|"]

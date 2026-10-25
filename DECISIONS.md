@@ -301,6 +301,17 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 - **Result:** 8 of 2,482 pairs flagged; all 8 are among the 15 biggest changes by cosine. Without them, the top of the list is mergers, spin-offs and rewrites (Paramount 2024, GE Vernova 2025, Union Pacific 2025, Occidental 2025, Kimberly-Clark 2025, Omnicom 2024).
 - **Not caught:** a company renaming itself. JPMorgan Chase became "JPMorganChase" in FY2024, so every sentence with the name counts as changed (cosine 0.931, simple 0.115). It is one filing; noted here rather than handled with another rule.
 
+### D-032 What kind of language changed: Loughran–McDonald word lists
+- **Chose:** count words from three Loughran–McDonald lists (negative, uncertainty, litigious) in each pair's **genuinely new** sentences (added, and not just moved from elsewhere) and **genuinely dropped** ones. Stored in the `change_words` table. Code: `src/tracker/wordlists.py`.
+- **Why these lists:** they were built for 10-Ks; general-purpose sentiment lists misread finance words ("liability", "tax" are neutral in a 10-K). They're the standard in this literature, including the follow-up work on *Lazy Prices*.
+- **Source, pinned:** the Master Dictionary, March 2026 release (10-Ks 1993–2025), from https://sraf.nd.edu/loughranmcdonald-master-dictionary/, SHA-256 in `config/settings.yaml`. The run refuses a different file. It's downloaded by hand into `data/reference/sources/lm/` (not committed). Without the file, scoring still runs and only this step is skipped.
+- **License:** free for academic research; commercial use needs a license from the authors. **This matters for Phase 5:** a public dashboard could count as commercial use.
+- **Reading the file:** each category column holds the year a word was added, or minus the year it was removed ("-2020"). Only words with a value above zero count. That leaves 2,345 negative, 297 uncertainty and 903 litigious words; 10 negative and 2 litigious words removed by the authors are excluded.
+- **Matching:** the dictionary has no hyphens or apostrophes, so "third-party" counts as "third" and "party", and "company's" as "company".
+- **Moved sentences are excluded** (D-030 note on reordering). Otherwise a company that reorders its risk factors would show lots of "new" negative words.
+- **First result (all years):** new text is a little more negative and litigious than the text it replaces, in every year. Negative: 4.08–4.43% of words in new sentences, against 3.94–4.25% in dropped ones. Uncertainty is about the same (around 3%). Phase 4 can test whether this matters for returns.
+- **Not done:** the other lists (positive, modal, constraining). Positive words are known to be unreliable in 10-Ks (often negated: "not profitable"). The others can be added the same way if Phase 4 needs them.
+
 ---
 
 ## Known limitations (to disclose)
@@ -330,6 +341,7 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 - [x] Phase 3: sentence splitting must ignore line breaks (D-027 known issue): done, D-028
 - [x] Phase 3: decide whether to remove risk factor summaries: removed for the main score, kept for a robustness score (D-029)
 - [ ] Phase 3: check the similarity definitions and text preparation against the *Lazy Prices* paper itself (no PDF in the project yet)
+- [ ] Phase 5: Loughran–McDonald lists are free for academic research only; check the license before any public or commercial dashboard (D-032)
 - [ ] Phase 4: price data must follow ticker changes (e.g. Equity Residential became Vivmark Residential after its 2026 merger with AvalonBay; the ticker is expected to change from EQR)
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)
