@@ -2,6 +2,8 @@
 
 Completed 2026-10-24. Every methodology choice mentioned here is explained in [DECISIONS.md](../DECISIONS.md).
 
+> **Correction found in Phase 2 (2026-10-25, D-025).** Ticker PARA was linked to the wrong company. After Paramount Global's 2025 merger, SEC's ticker file gave PARA to Banzai International, so Banzai's 10-Ks had replaced Paramount's for fiscal 2021–2024. The Phase 1 reused-ticker check didn't catch this. After the fix the sample is **2,494** 10-Ks (not 2,495). A new check now compares each 10-K's cover-page company size against S&P 500 scale, and it found no other cases. The figures below are the original Phase 1 numbers.
+
 ## 1. What we built
 
 **Phase 0: project setup.** A clean project structure. All research settings live in one file (`config/settings.yaml`). Every run writes a log file. A SQLite database tracks every filing. `DECISIONS.md` records each choice and why. Everything is in git.

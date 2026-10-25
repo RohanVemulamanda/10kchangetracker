@@ -167,6 +167,10 @@ Each result stores the version of the extraction code (`EXTRACTOR_VERSION`). Cha
 - **New check (`python run.py check-filers`):** reads the public float from each sample 10-K's cover page (the market value of shares held by outside investors, tagged `dei:EntityPublicFloat`) and lists any under $1 billion or not tagged, in `reports/filer_size_check.csv`. S&P 500 members are worth billions; a mismatched small company stands out.
 - **Expected false alarms:** a new spin-off's first 10-K often reports no float, because it wasn't trading yet on the measurement date.
 - **Filer error found while building it:** Zimmer Biomet's 2021 float is tagged as millions but written in full dollars, making it $33 quadrillion. Values over $10 trillion are read without the scale.
+- **Result (2026-10-25):** 10 of 2,494 sample 10-Ks were listed. The company name in every one of those filings matches the S&P 500 member for its ticker, so no other reused tickers were found.
+  - 4 are new companies whose first 10-K was measured before they began trading: Constellation Energy FY2021, GE HealthCare FY2022, Smurfit Westrock FY2024, FedEx Freight FY2025.
+  - 6 are large companies whose cover-page tag reads 0 or too small: Electronic Arts FY2021, Ares FY2025, Duke Energy FY2022, SolarEdge FY2022, Corteva FY2023–2024. Duke and Corteva file one 10-K for several legal entities, some of which report no float.
+  - The float isn't used as data anywhere; Phase 4 market values will come from price data.
 
 ### D-026 Extraction version 1.1: fixes from the first full run
 The first run (v1.0) extracted 99% of sample filings. The 39 flagged or missing ones came from 11 companies. We looked at a filing from each and fixed causes, not cases:
@@ -204,7 +208,8 @@ The first run (v1.0) extracted 99% of sample filings. The 39 flagged or missing 
 - [x] Review the `suspicious_mapping` rows in `reports/gaps.csv` (Exxon: fixed by D-018)
 - [x] Re-run with `predecessors.csv` and confirm Exxon, BlackRock, Bunge and APA are complete (+8 sample, +4 comparison filings, as predicted)
 - [x] Decide how to treat spin-offs and mergers with no prior 10-K: first year left unscored (D-019)
-- [ ] Phase 2: re-run with extraction v1.1 and the PARA fix; check reports/filer_size_check.csv
+- [x] PARA fix re-run (sample 2,495 -> 2,494: Banzai's 4 years out, Paramount's 3 in) and filer-size check reviewed
+- [ ] Phase 2: re-run with extraction v1.1
 - [ ] Phase 2: hand-review 20 random extractions and every remaining flagged case
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)
