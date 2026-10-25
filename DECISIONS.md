@@ -160,6 +160,33 @@ Flagged filings are kept, not dropped, and are listed in `reports/phase2_flagged
 ### D-024 Re-running after fixes
 Each result stores the version of the extraction code (`EXTRACTOR_VERSION`). Changing the rules means bumping the version. The next run then redoes every filing, so all results always come from the same rules.
 
+### D-025 Check that every sample 10-K comes from a large company (found in Phase 2)
+- **Problem:** the first full extraction showed "Banzai International" under ticker PARA. PARA was Paramount Global's ticker from February 2022 (after ViacomCBS renamed) until its 2025 merger. Afterwards, SEC's current ticker file gave PARA to Banzai, a small former blank-check company, so Banzai's 10-Ks replaced Paramount's for fiscal 2021–2024.
+- **Why Phase 1 missed it:** the reused-ticker check (D-009) only asks "did this company file a 10-K while the ticker was in the index?" Banzai did.
+- **Fix:** PARA → Paramount Global (CIK 813828) added to `manual_cik_map.csv`. When a company no longer maps to any ticker, its filings now leave the sample.
+- **New check (`python run.py check-filers`):** reads the public float from each sample 10-K's cover page (the market value of shares held by outside investors, tagged `dei:EntityPublicFloat`) and lists any under $1 billion or not tagged, in `reports/filer_size_check.csv`. S&P 500 members are worth billions; a mismatched small company stands out.
+- **Expected false alarms:** a new spin-off's first 10-K often reports no float, because it wasn't trading yet on the measurement date.
+- **Filer error found while building it:** Zimmer Biomet's 2021 float is tagged as millions but written in full dollars, making it $33 quadrillion. Values over $10 trillion are read without the scale.
+
+### D-026 Extraction version 1.1: fixes from the first full run
+The first run (v1.0) extracted 99% of sample filings. The 39 flagged or missing ones came from 11 companies. We looked at a filing from each and fixed causes, not cases:
+- **"Item 1.A." (Clorox, Rollins):** a period between number and letter. It counts only when a letter follows directly, so "Item 1. A Description..." is still Item 1.
+- **"Part I. Item 1A." (Expedia):** the part number written in front of the item.
+- **Bold run-in heading, "Risk Factors An investment in..." (US Bancorp EX-13):** each block now remembers its leading bold words.
+- **Page range (US Bancorp):** the 10-K says Item 1A is "on pages 140 to 155" of the annual report, and the section is followed by a list of executives that no heading rule recognizes. When a 10-K gives a page range, we stop at the end of the last page.
+- **Risk factors inside MD&A (Eastman 2020–2022):** Item 1A says "see Risk Factors in Item 7". Two bugs:
+  - The MD&A's own contents line "Risk Factors 56" was taken as the heading. Contents lines (in a table, ending in a page number) are no longer starts.
+  - The running page header "MANAGEMENT'S DISCUSSION AND ANALYSIS..." ended the section after one page. Page headers and footers can no longer end a section.
+- **Headed parts (Synchrony):** no single "Risk Factors" heading. Its own cross-reference index gives Item 1A as pages 60–81 and 101–106: "Risk Factors Summary", "...Relating to Our Business" and "...Relating to Regulation". New fallback method `heading_parts` joins bold "Risk Factors ..." headed parts, each ending at its next contents entry. Used only when the other methods fail.
+- **Line-by-line documents (ConocoPhillips 2020–2021):** every printed line is its own HTML element.
+  - The "short leftover line" cleanup (D-021) had removed two real lines. It now only removes labels that start with a capital and don't end in punctuation, like "Parts I and II".
+  - Lines are rejoined into paragraphs when the section's median line is under 80 characters.
+- **Decorative lines** ("______", "* * *") are removed.
+- **False overrun (ConocoPhillips):** a lowercase "properties." at the end of a list item looked like the "Properties" header. Headers must start with a capital.
+- **Regression check:** re-extracting the 25 original sample filings changed only one, Wells Fargo, by 2 "words": the removed "* * *".
+
+**Reviewed by hand and kept as is:** the `long` flags (over 50,000 words) for KKR (68,000–71,000), Ares (52,000–54,000) and Moderna 2020 (54,000). Each runs from the Item 1A header to the Item 1B header, ends on the company's real last risk factor, and has a steady length year to year. These firms really do write very long risk sections. The flag stays, so it remains visible.
+
 ---
 
 ## Known limitations (to disclose)
@@ -177,6 +204,7 @@ Each result stores the version of the extraction code (`EXTRACTOR_VERSION`). Cha
 - [x] Review the `suspicious_mapping` rows in `reports/gaps.csv` (Exxon: fixed by D-018)
 - [x] Re-run with `predecessors.csv` and confirm Exxon, BlackRock, Bunge and APA are complete (+8 sample, +4 comparison filings, as predicted)
 - [x] Decide how to treat spin-offs and mergers with no prior 10-K: first year left unscored (D-019)
-- [ ] Phase 2: hand-review 20 random extractions and every flagged case
+- [ ] Phase 2: re-run with extraction v1.1 and the PARA fix; check reports/filer_size_check.csv
+- [ ] Phase 2: hand-review 20 random extractions and every remaining flagged case
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)

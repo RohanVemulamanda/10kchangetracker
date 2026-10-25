@@ -113,6 +113,16 @@ class EndToEnd(unittest.TestCase):
             step_spot_check(self.conn, how_many=3, seed=7)
         self.assertEqual(printed.getvalue().count("https://www.sec.gov/Archives/edgar/data/"), 3)
 
+    def test_company_that_loses_its_ticker_leaves_the_sample(self):
+        # Like PARA: first mapped to the wrong company (CIK 2), then corrected to CIK 3.
+        step_find_filings(self.settings, self.conn, self.client)
+        self.assertGreater(self.conn.execute("SELECT COUNT(*) FROM filings WHERE selected = 1 AND company_cik = 2").fetchone()[0], 0)
+        self.conn.execute("UPDATE ticker_map SET cik = 3 WHERE sec_ticker = 'NEWCO'")
+        self.conn.commit()
+        stats = step_find_filings(self.settings, self.conn, self.client)
+        self.assertGreater(stats["dropped_unmapped"], 0)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM filings WHERE selected = 1 AND company_cik = 2").fetchone()[0], 0)
+
     def test_company_that_changed_sec_id(self):
         # OILCO moved under a new holding company (CIK 50) that hasn't filed a 10-K yet.
         # Every 10-K so far was filed under the old ID (CIK 40). This is Exxon's situation in 2026.

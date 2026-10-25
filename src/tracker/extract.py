@@ -2,11 +2,13 @@
 
 For each filing, try in this order and keep the first that finds 300+ words (D-020):
   1. "item":              Item 1A in the main 10-K document
-  2. "item_exhibit13":    if the main document's Item 1A only points elsewhere
-     "heading_exhibit13"  ("...can be found in the Annual Report..."), look in the
-                          EX-13 exhibit: by Item 1A header, then by "Risk Factors" heading
+  2. "..._exhibit13":     if the main document's Item 1A only points elsewhere
+                          ("...can be found in the Annual Report on pages 140 to 155..."),
+                          look in the EX-13 exhibit by item header, heading, then headed parts.
+                          If the 10-K gave a page range, stop at the end of its last page.
   3. "heading":           a "Risk Factors" heading in the main document
-  4. the EX-13 methods, if not tried yet
+  4. "heading_parts":     several "Risk Factors ..." headed parts in the main document (Synchrony)
+  5. the EX-13 methods, if not tried yet
 
 Results go to data/processed/sections.db, one row per filing and section.
 The run resumes: filings already extracted by the current code version are skipped.
@@ -22,13 +24,15 @@ from datetime import datetime
 from pathlib import Path
 
 from .html_text import Block, html_to_blocks
-from .sections import (ITEM_1A, MIN_SECTION_WORDS, SectionSpec, find_by_heading, find_by_item, is_reference_only,
-                       overrun_hits, page_furniture, scoring_text, section_blocks)
+from .sections import (ITEM_1A, MIN_SECTION_WORDS, PAGE_RANGE, SectionSpec, cut_at_page, find_by_heading,
+                       find_by_heading_parts, find_by_item, is_reference_only, overrun_hits, page_furniture,
+                       reflow_lines, scoring_text, section_blocks)
 
 log = logging.getLogger(__name__)
 
 # Bump this whenever the extraction rules change. Rows made by an older version get redone.
-EXTRACTOR_VERSION = "1.0"
+EXTRACTOR_VERSION = "1.1"   # 1.1: "Item 1.A.", "Part I. Item 1A.", bold run-in headings, page headers
+                            #      can't end a section, headed parts, page-range stop (D-026)
 
 # Quality-check thresholds (D-021)
 MIN_WORDS_OK = 1_000
@@ -80,31 +84,43 @@ def extract_filing(filing: dict, raw_dir: Path, spec: SectionSpec = ITEM_1A) -> 
     documents = [("main", filing["primary_path"])]
     documents += [("exhibit13", p) for p in json.loads(filing["exhibit13_paths"] or "[]")]
     blocks_by_doc = {path: load_blocks(raw_dir, path) for _, path in documents}
+    furniture_by_doc = {path: page_furniture(blocks) for path, blocks in blocks_by_doc.items()}
     main_path = filing["primary_path"]
+    exhibits = [p for kind, p in documents if kind == "exhibit13"]
 
-    attempts: list[tuple[str, str, str]] = []  # (method name, document path, "item" or "heading")
+    # Which rules to try, in order: (method name, document, rule)
+    attempts: list[tuple[str, str, str]] = []
+    last_page = None  # set if the 10-K says which pages of the annual report hold Item 1A
     main_item = find_by_item(blocks_by_doc[main_path], spec)
     if main_item is not None and main_item.words >= MIN_SECTION_WORDS:
         attempts.append(("item", main_path, "item"))
     else:
         if main_item is not None and is_reference_only(blocks_by_doc[main_path], main_item):
-            notes.append("Item 1A in the main document refers elsewhere: "
-                         + " ".join(b.text for b in blocks_by_doc[main_path][main_item.start + 1:main_item.end])[:300])
-            attempts += [("item_exhibit13", p, "item") for kind, p in documents if kind == "exhibit13"]
-            attempts += [("heading_exhibit13", p, "heading") for kind, p in documents if kind == "exhibit13"]
-        attempts.append(("heading", main_path, "heading"))
-        for kind, p in documents:
-            if kind == "exhibit13":
-                for name, how in (("item_exhibit13", "item"), ("heading_exhibit13", "heading")):
-                    if (name, p, how) not in attempts:
-                        attempts.append((name, p, how))
+            reference = " ".join(b.text for b in blocks_by_doc[main_path][main_item.start + 1:main_item.end])
+            notes.append("Item 1A in the main document refers elsewhere: " + reference[:300])
+            pages = PAGE_RANGE.search(reference)
+            last_page = int(pages.group(2)) if pages else None
+            for rule in ("item", "heading", "parts"):
+                attempts += [(f"{rule}_exhibit13", p, rule) for p in exhibits]
+        attempts += [("heading", main_path, "heading"), ("heading_parts", main_path, "parts")]
+        for rule in ("item", "heading", "parts"):
+            attempts += [(f"{rule}_exhibit13", p, rule) for p in exhibits if (f"{rule}_exhibit13", p, rule) not in attempts]
 
     chosen = None
-    for method, path, how in attempts:
-        blocks = blocks_by_doc[path]
-        found = find_by_item(blocks, spec) if how == "item" else find_by_heading(blocks, spec)
-        if found is not None and found.words >= MIN_SECTION_WORDS:
-            chosen = (method, path, found)
+    for method, path, rule in attempts:
+        blocks, furniture = blocks_by_doc[path], furniture_by_doc[path]
+        if rule == "item":
+            found = find_by_item(blocks, spec)
+            parts = [found] if found else []
+        elif rule == "heading":
+            found = find_by_heading(blocks, spec, furniture)
+            parts = [found] if found else []
+        else:
+            parts = find_by_heading_parts(blocks, spec, furniture)
+        if parts and path != main_path and last_page is not None and cut_at_page(blocks, parts[-1], last_page):
+            notes.append(f"stopped at the end of page {last_page}, the last page the 10-K gives for Item 1A")
+        if sum(f.words for f in parts) >= MIN_SECTION_WORDS:
+            chosen = (method.replace("parts_exhibit13", "heading_parts_exhibit13"), path, parts)
             break
 
     row = {
@@ -118,9 +134,21 @@ def extract_filing(filing: dict, raw_dir: Path, spec: SectionSpec = ITEM_1A) -> 
                    flags="not_found", seconds=round(time.monotonic() - started, 2))
         return row
 
-    method, path, found = chosen
+    method, path, parts = chosen
     blocks = blocks_by_doc[path]
-    kept, removed = section_blocks(blocks, found, page_furniture(blocks))
+    kept, removed = [], 0
+    for found in parts:
+        part_kept, part_removed = section_blocks(blocks, found, furniture_by_doc[path])
+        kept += part_kept
+        removed += part_removed
+        notes += found.notes
+    if len(parts) > 1:
+        notes.append(f"{len(parts)} parts joined: " + " | ".join(f.header_text[:60] for f in parts))
+    kept, reflowed = reflow_lines(kept)
+    if reflowed:
+        notes.append("document puts each printed line in its own element; lines rejoined into paragraphs")
+    found = parts[0]
+    found.end_text = parts[-1].end_text
     text = scoring_text(kept)
     words = len(text.split())
     flags = []
@@ -132,7 +160,6 @@ def extract_filing(filing: dict, raw_dir: Path, spec: SectionSpec = ITEM_1A) -> 
     if over:
         flags.append("overrun")
         notes.append("later headers inside the section: " + " | ".join(over[:3]))
-    notes += found.notes
     row.update(
         status="flagged" if flags else "ok",
         method=method,

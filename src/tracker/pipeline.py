@@ -23,6 +23,7 @@ from . import db
 from .config import ConfigError, get_user_agent, load_settings, project_path
 from .downloader import download_pending
 from .edgar_client import DownloadError, EdgarClient, SecAccessDenied
+from .cover import check_filers
 from .extract import connect_sections, run_extraction
 from .extract_report import write_phase2_summary, write_review_page
 from .header import api_minus_header_minutes, index_headers_url, parse_index_headers
@@ -145,7 +146,18 @@ def step_find_filings(settings: dict, conn: sqlite3.Connection, client: EdgarCli
         + ", selected = 1"  # download status columns are deliberately left alone
     )
 
-    stats = {"companies": len(ciks), "failed_companies": 0, "sample": 0, "comparison": 0, "excluded": 0, "mapping_problems": 0}
+    stats = {"companies": len(ciks), "failed_companies": 0, "sample": 0, "comparison": 0, "excluded": 0,
+             "mapping_problems": 0, "dropped_unmapped": 0}
+    if not only_tickers:
+        # A company no ticker maps to any more (e.g. after fixing a wrong ticker link) leaves the sample.
+        marks = ",".join("?" * len(ciks))
+        stats["dropped_unmapped"] = conn.execute(
+            f"UPDATE filings SET selected = 0 WHERE selected = 1 AND COALESCE(company_cik, cik) NOT IN ({marks})",
+            ciks).rowcount
+        conn.commit()
+        if stats["dropped_unmapped"]:
+            log.warning("%d filings left the sample because their company no longer maps to any ticker",
+                        stats["dropped_unmapped"])
     log.info("Finding filings for %d companies (fiscal years %d-%d)", len(ciks), start_fy, end_fy)
     for i, cik in enumerate(ciks, start=1):
         now = datetime.now().isoformat(timespec="seconds")
@@ -257,6 +269,14 @@ def step_extract(settings: dict, conn: sqlite3.Connection, tickers: list[str] | 
         sconn.close()
 
 
+def step_check_filers(settings: dict, conn: sqlite3.Connection) -> None:
+    """List sample 10-Ks whose company looks too small to be in the S&P 500 (a reused ticker)."""
+    p = paths(settings)
+    counts = check_filers(conn, p["raw_dir"], p["reports_dir"])
+    print(f"\nChecked {counts['checked']:,} sample 10-Ks. {counts['suspicious']} have a public float under $1 billion "
+          "or none tagged; they are listed in reports/filer_size_check.csv.")
+
+
 def step_review(settings: dict, conn: sqlite3.Connection, seed: int | None) -> None:
     p = paths(settings)
     sconn = connect_sections(p["sections_db"])
@@ -287,6 +307,9 @@ def run(command: str, tickers: list[str] | None = None, seed: int | None = None,
             return 0
         if command == "review-extractions":
             step_review(settings, conn, seed)
+            return 0
+        if command == "check-filers":
+            step_check_filers(settings, conn)
             return 0
 
         if command in {"universe", "all"}:

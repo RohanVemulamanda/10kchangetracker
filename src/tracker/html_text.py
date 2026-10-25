@@ -43,6 +43,8 @@ class Block:
     table_id: int | None = None        # which table the row came from (None = not in a table)
     data_table: bool = False           # that table mostly holds numbers or short labels
     page_break_before: bool = False    # a page break came just before this block
+    lead_bold: str = ""                # bold words at the start of a block whose rest isn't bold:
+                                       # a run-in heading, "Risk Factors An investment in..." (US Bancorp)
 
 
 def normalize(text: str) -> str:
@@ -82,9 +84,23 @@ class _BlockBuilder:
                 italic=italic_share >= 0.8,
                 table_id=self.table_stack[-1] if self.table_stack else None,
                 page_break_before=self.page_break_pending,
+                lead_bold=self._lead_bold(text),
             ))
             self.page_break_pending = False
         self.pieces = []
+
+    def _lead_bold(self, full_text: str) -> str:
+        """The bold text at the start of the block, if the block then continues in non-bold text."""
+        lead = []
+        for text, bold, _ in self.pieces:
+            if not text.strip():
+                lead.append(text)
+                continue
+            if not bold:
+                break
+            lead.append(text)
+        lead_text = normalize("".join(lead))
+        return lead_text if lead_text and lead_text != full_text else ""
 
     def page_break(self) -> None:
         self.flush()

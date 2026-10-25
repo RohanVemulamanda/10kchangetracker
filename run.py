@@ -25,6 +25,7 @@ COMMANDS = {
     "download": "Download the chosen filings. Safe to stop and restart.",
     "summary": "Write and print reports/phase1_summary.md.",
     "spot-check": "Print 10 random downloaded filings with EDGAR links, to check by hand.",
+    "check-filers": "List sample 10-Ks from companies too small to be S&P 500 members (catches reused tickers).",
     "all": "universe -> map-tickers -> find-filings -> download -> summary",
     "extract": "Phase 2: extract Item 1A (Risk Factors) from every downloaded 10-K. Safe to stop and restart.",
     "review-extractions": "Phase 2: write reports/phase2_review.html with 20 random extractions to check by hand.",

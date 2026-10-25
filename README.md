@@ -71,6 +71,7 @@ python run.py review-extractions               # writes reports/phase2_review.ht
 
 - Results go to `data/processed/sections.db` (table `sections`), with a display version and a scoring version of each section.
 - `reports/phase2_summary.md` has the success rate; `reports/phase2_flagged.csv` lists every flagged or missing filing with an EDGAR link.
+- `python run.py check-filers` lists sample 10-Ks from companies too small to be S&P 500 members (catches reused tickers, D-025).
 - `python run.py extract --force` redoes everything (after changing the extraction rules, bump `EXTRACTOR_VERSION` in `src/tracker/extract.py` instead).
 
 ## Checking Phase 1 is correct
@@ -110,6 +111,7 @@ src/tracker/             the code, one file per job:
   downloader.py            downloads with resume
   summary.py               the end-of-run report
   html_text.py             Phase 2: 10-K HTML -> paragraphs
+  cover.py                 company-size check from each 10-K's cover page
   sections.py              Phase 2: find and clean Item 1A
   extract.py               Phase 2: run the extraction over all filings
   extract_report.py        Phase 2: summary, flagged list, review page

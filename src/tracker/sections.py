@@ -26,15 +26,20 @@ from dataclasses import dataclass, field
 
 from .html_text import Block
 
-# "Item 1A", "ITEM 1A.", "Item 1(A)", "Item 1 (B) -", "Item 7A", "Item 10" ...
-ITEM_HEADER = re.compile(r"^item\s*(\d{1,2})\s*\(?\s*([a-d])?\s*\)?(?=$|[\s.:\-–—])", re.I)
+# "Item 1A", "ITEM 1A.", "Item 1(A)", "Item 1 (B) -", "Item 1.A." (Clorox, Rollins),
+# "Part I. Item 1A." (Expedia), "Item 7A", "Item 10" ...
+# The period in "1.A" only counts when a letter follows right away, so "Item 1. A ..." stays Item 1.
+ITEM_HEADER = re.compile(
+    r"^(?:part\s+[ivx]{1,3}\s*[.,:\-–—]?\s*)?item\s*(\d{1,2})(?:\.(?=[a-d]\b))?\s*\(?\s*([a-d])?\s*\)?(?=$|[\s.:\-–—])",
+    re.I)
+PAGE_RANGE = re.compile(r"pages?\s+(\d{1,3})\s*(?:to|through|-|–|—)\s*(\d{1,3})", re.I)
 # Only a LATER part ends a Part I item. ("Part I" itself is often a running page header.)
 LATER_PART_HEADER = re.compile(r"^part\s+(ii|iii|iv|2|3|4)\b\W*$", re.I)
 PAGE_NUMBER = re.compile(r"^(page\s*)?[\-–—]?\s*(\d{1,3}|[ivxlc]{1,7})\s*[\-–—]?$", re.I)
 TABLE_OF_CONTENTS = re.compile(r"^(back to |return to )?(the )?table of contents\W*$", re.I)
 REFERENCE_ONLY = re.compile(r"incorporated\s+(herein\s+)?by\s+reference|can be found|is included (in|under)|is contained in", re.I)
 TRAILING_PAGES = re.compile(r"[\s.]*\d{1,3}(\s*[-–—]\s*\d{1,3})?(\s*,\s*\d{1,3}(\s*[-–—]\s*\d{1,3})?)*\s*$")
-LEADING_ITEM = re.compile(r"^(item\s*)?\d{1,2}\s*\(?\s*[a-d]?\s*\)?\s*[.:\-–—]\s*", re.I)
+LEADING_ITEM = re.compile(r"^(part\s+[ivx]{1,3}\s*[.,:\-–—]?\s*)?(item\s*)?\d{1,2}\.?\s*\(?\s*[a-d]?\s*\)?\s*[.:\-–—]?\s+", re.I)
 
 # Standard 10-K section titles that can end a "heading"-method section. Compared after
 # lower-casing and removing punctuation. "prefix" titles also match longer versions.
@@ -121,7 +126,8 @@ def heading_match(block: Block, title: str) -> int | None:
     """Is this block the heading `title`? Returns where the section text starts inside the block.
 
     Matches a standalone heading ("Risk Factors", "Item 1A. Risk Factors", "RISK FACTORS 49"),
-    or a run-in heading in capitals ("RISK FACTORS. The following discussion...").
+    a run-in heading in capitals ("RISK FACTORS. The following discussion...", GE), or a
+    bold run-in heading ("**Risk Factors** An investment in the Company...", US Bancorp).
     Returns None if it isn't a match.
     """
     if title_of(block.text) == title:
@@ -130,19 +136,23 @@ def heading_match(block: Block, title: str) -> int | None:
     m = re.match(r"^\s*" + re.escape(upper).replace(r"\ ", r"\s+") + r"\s*[.:—–-]\s+", block.text)
     if m:
         return m.end()
+    if block.lead_bold and title_of(block.lead_bold) == title and block.text.startswith(block.lead_bold):
+        return len(block.lead_bold)
     return None
 
 
+def _is_end(title: str, extra_titles: set[str]) -> bool:
+    return title in END_TITLES_EXACT or title in extra_titles or title.startswith(END_TITLES_PREFIX)
+
+
 def is_end_title(block: Block, extra_titles: set[str]) -> bool:
-    t = title_of(block.text)
-    if t in END_TITLES_EXACT or t in extra_titles or t.startswith(END_TITLES_PREFIX):
+    if _is_end(title_of(block.text), extra_titles):
         return True
-    # run-in end headings in capitals, e.g. "LEGAL PROCEEDINGS. Refer to Note 24..."
+    # run-in end headings: in capitals ("LEGAL PROCEEDINGS. Refer to Note 24...") or in bold
     m = re.match(r"^([A-Z][A-Z ,&’'\-]{3,80})[.:—–]\s", block.text)
-    if m:
-        t = simplify(m.group(1))
-        return t in END_TITLES_EXACT or t in extra_titles or t.startswith(END_TITLES_PREFIX)
-    return False
+    if m and _is_end(simplify(m.group(1)), extra_titles):
+        return True
+    return bool(block.lead_bold) and _is_end(title_of(block.lead_bold), extra_titles)
 
 
 def content_words(blocks: list[Block], start: int, end: int, start_offset: int = 0) -> int:
@@ -216,18 +226,33 @@ def titles_after_in_contents(blocks: list[Block], title: str) -> set[str]:
     return found
 
 
-def find_by_heading(blocks: list[Block], spec: SectionSpec = ITEM_1A) -> Found | None:
+def find_end(blocks: list[Block], start: int, stop: int, next_titles: set[str], furniture: set[str],
+             spec: SectionSpec = ITEM_1A) -> int:
+    """The first block after `start` (and before `stop`) that begins another section.
+
+    Running page headers never count: Eastman prints "MANAGEMENT'S DISCUSSION AND ANALYSIS..."
+    at the top of every MD&A page, which would otherwise end its Risk Factors after one page.
+    """
+    for j in range(start + 1, stop):
+        b = blocks[j]
+        if masked(b.text) in furniture:
+            continue
+        if is_end_title(b, next_titles) or is_item_header(b.text) not in (None, spec.item):
+            return j
+    return stop
+
+
+def find_by_heading(blocks: list[Block], spec: SectionSpec = ITEM_1A, furniture: set[str] | None = None) -> Found | None:
+    furniture = page_furniture(blocks) if furniture is None else furniture
     next_titles = titles_after_in_contents(blocks, spec.title)
     best: Found | None = None
     for i, b in enumerate(blocks):
         offset = heading_match(b, spec.title)
         if offset is None:
             continue
-        end = len(blocks)
-        for j in range(i + 1, len(blocks)):
-            if is_end_title(blocks[j], next_titles) or is_item_header(blocks[j].text) not in (None, spec.item):
-                end = j
-                break
+        if b.table_id is not None and re.search(r"\d\s*$", b.text):
+            continue  # a contents line ("Risk Factors 56"), not the heading itself (Eastman's MD&A contents)
+        end = find_end(blocks, i, len(blocks), next_titles, furniture, spec)
         found = Found("heading", i, end, offset, b.text[:200],
                       blocks[end].text[:200] if end < len(blocks) else "(end of document)")
         found.words = content_words(blocks, i, end, offset)
@@ -236,6 +261,56 @@ def find_by_heading(blocks: list[Block], spec: SectionSpec = ITEM_1A) -> Found |
     if best is not None and next_titles:
         best.notes.append("contents lists next: " + "; ".join(sorted(next_titles))[:200])
     return best
+
+
+# ---------------------------------------------------------------- method 3: headed parts
+
+def find_by_heading_parts(blocks: list[Block], spec: SectionSpec = ITEM_1A,
+                          furniture: set[str] | None = None) -> list[Found]:
+    """Risk factors split into several headed parts, with no single "Risk Factors" heading.
+
+    Synchrony's 10-K has "Risk Factors Summary", "Risk Factors Relating to Our Business"
+    and, 40 pages later, "Risk Factors Relating to Regulation". Its own cross-reference
+    index says Item 1A is exactly those pages. Each part is a bold or all-capitals heading
+    of 10 words or fewer that starts with "Risk Factors ..." (contents rows don't count).
+    Each part ends at the next contents entry after it, a standard section title, an item
+    header, or the next part. Parts under 100 words are dropped. Only used when the
+    other two methods find nothing.
+    """
+    furniture = page_furniture(blocks) if furniture is None else furniture
+    prefix = spec.title + " "
+    starts = [i for i, b in enumerate(blocks)
+              if not b.data_table and (b.bold or b.text.isupper()) and len(b.text.split()) <= 10
+              and title_of(b.text).startswith(prefix) and masked(b.text) not in furniture]
+    parts = []
+    for n, i in enumerate(starts):
+        stop = starts[n + 1] if n + 1 < len(starts) else len(blocks)
+        end = find_end(blocks, i, stop, titles_after_in_contents(blocks, title_of(blocks[i].text)), furniture, spec)
+        found = Found("heading_parts", i, end, len(blocks[i].text), blocks[i].text[:200],
+                      blocks[end].text[:200] if end < len(blocks) else "(end of document)")
+        found.words = content_words(blocks, i + 1, end)
+        if found.words >= 100:
+            parts.append(found)
+    return parts
+
+
+def cut_at_page(blocks: list[Block], found: Found, last_page: int) -> bool:
+    """Stop the section at the end of `last_page` (the page number printed at the bottom).
+
+    Used when a 10-K says where Item 1A is ("...in the Annual Report on pages 140 to 155...").
+    US Bancorp's risk factors are followed by a list of executives, which no heading rule
+    would recognize as the next section. Returns True if the section was shortened.
+    """
+    for j in range(found.start + 1, found.end):
+        text = blocks[j].text
+        if PAGE_NUMBER.match(text) and text.strip(" -–—").lower().removeprefix("page").strip() == str(last_page):
+            if j + 1 < found.end:
+                found.end = j + 1
+                found.end_text = f"(end of page {last_page}, as stated in the 10-K)"
+                found.words = content_words(blocks, found.start, found.end, found.start_offset)
+                return True
+            return False
+    return False
 
 
 # ---------------------------------------------------------------- cleaning
@@ -307,14 +382,46 @@ def section_blocks(blocks: list[Block], found: Found, furniture: set[str] | None
     removed = 0
     for i in range(found.start + 1, found.end):
         b = blocks[i]
-        if PAGE_NUMBER.match(b.text) or TABLE_OF_CONTENTS.match(b.text) or masked(b.text) in furniture:
+        if (PAGE_NUMBER.match(b.text) or TABLE_OF_CONTENTS.match(b.text) or masked(b.text) in furniture
+                or not re.search(r"[A-Za-z0-9]", b.text)):  # decorative lines: "______", "* * *"
             removed += 1
         else:
             kept.append((i, b))
-    while kept and kept[-1][0] in near and len(kept[-1][1].text.split()) <= 6 and kept[-1][0] != found.start:
+    while kept and kept[-1][0] in near and kept[-1][0] != found.start and is_leftover_label(kept[-1][1].text):
         kept.pop()
         removed += 1
     return [b for _, b in kept], removed
+
+
+def is_leftover_label(text: str) -> bool:
+    """A short label like "Parts I and II": 6 words or fewer, starts with a capital or digit,
+    no sentence punctuation at the end. A sentence fragment ("increase for us in the future.")
+    never qualifies, so text from documents that break paragraphs into lines is safe."""
+    return len(text.split()) <= 6 and text[:1].isupper() and not re.search(r"[.!?,;:)”\"]$", text)
+
+
+def reflow_lines(kept: list[Block]) -> tuple[list[Block], bool]:
+    """Rejoin paragraphs in documents that put each printed line in its own HTML element.
+
+    ConocoPhillips's 10-K arrives as "You should carefully" / "consider the following risk
+    factors" / ... Only applied when the section's lines are short (median under 80
+    characters); normal 10-Ks have paragraphs of several hundred characters. A line joins
+    the one before it when the one before doesn't end a sentence, both have the same
+    bold-ness (so headings stay separate), neither is a table row, and the line isn't a new bullet.
+    Returns the blocks and whether anything was rejoined.
+    """
+    prose = [len(b.text) for b in kept if not b.data_table]
+    if not prose or sorted(prose)[len(prose) // 2] >= 80:
+        return kept, False
+    out: list[Block] = []
+    for b in kept:
+        prev = out[-1] if out else None
+        if (prev is not None and not prev.data_table and not b.data_table and prev.bold == b.bold
+                and not re.search(r"[.!?:;”\"]$", prev.text) and not re.match(r"^[•●○■□◦▪▫➢➤►✓·]", b.text)):
+            out[-1] = Block(prev.text + " " + b.text, prev.bold, prev.italic, prev.table_id, prev.data_table)
+        else:
+            out.append(b)
+    return out, True
 
 
 SCORING_REPLACEMENTS = [
@@ -349,6 +456,8 @@ def overrun_hits(kept: list[Block], spec: SectionSpec = ITEM_1A) -> list[str]:
         key = is_item_header(b.text)
         if key is not None and key > spec.item and not b.data_table:
             hits.append(b.text[:80])
-        elif simplify(b.text) in END_TITLES_EXACT - {"cybersecurity"}:
+        elif simplify(b.text) in END_TITLES_EXACT - {"cybersecurity"} and b.text[:1].isupper():
+            # A heading starts with a capital: "Properties". A lowercase "properties." is
+            # just the last word of a list item (ConocoPhillips), not a header.
             hits.append(b.text[:80])
     return hits
