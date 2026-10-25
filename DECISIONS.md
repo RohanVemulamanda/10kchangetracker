@@ -236,6 +236,39 @@ A small cleanup: a bare number in front of a title is no longer removed unless a
 
 ---
 
+## Phase 3: change scores
+
+Choices made 2026-10-25. Rohan approved the recommended option for each question in the Phase 3 plan.
+
+### D-028 Text preparation: sentences and words
+- **Line breaks are ignored.** All lines of a section are joined into one stream of text, and sentences are found from punctuation only. This keeps the D-027 promise: in the 6% of sections where a sentence is split across lines, the split can't change any score. A test checks that Vertex's line-by-line text gives exactly the same sentences and words as the same text written as one paragraph.
+- **Sentence ends:** `.` `!` or `?` followed by a space and a capital letter or digit. Not after a common abbreviation ("Inc.", "No.", "U.S.") or an initial ("J. Smith"), unless the next word is a common sentence opener ("...outside the U.S. We face..."). In our data, "U.S." comes before a capitalised word about 13,000 times. Most of these are names ("U.S. Government" 1,724, "U.S. Department" 1,269), which is why a plain "period + capital" rule isn't enough.
+- **Accepted cost:** a heading without a final period joins the sentence after it ("Risks Related to Our Business Our success depends on..."). This only affects the sentence-level measure, and it happens the same way every year. The other option, treating a line break as a sentence end when the line has no final punctuation, would split Vertex's sentences in the middle, which is the problem D-027 is about.
+- **Hyphen at a line end:** joined without a space ("third-\nparty" → "third-party"). All 206 cases in the data are real hyphenated words.
+- **Words:** lower case, punctuation dropped, "company's" and "third-party" kept as one word.
+- **Numbers become one placeholder ("#").** Otherwise every 10-K looks a little changed just because "fiscal 2024" became "fiscal 2025". A new sentence containing a number still counts as new. The cost is that a changed number in an otherwise identical sentence isn't counted.
+- **No stop-word removal and no stemming** ("risks" stays "risks"). There are fewer choices to defend, and as far as we know this matches the paper. **Not yet checked against the paper's text** (no PDF in the project); see the open items.
+
+### D-029 Risk factor summaries: removed for the main score, kept for a robustness score
+- **Why:** since 2020 the SEC asks for a summary of the risk factors (at most 2 pages) when they run over 15 pages. Many companies put it at the top of Item 1A. It repeats the risk headings, so that text would count twice. The year a company adds one, the section looks changed although nothing in the business did. Every pair is scored twice: the **main score with summaries removed**, and a **robustness score with them kept**, so Phase 4 can show the choice doesn't drive the results.
+- **How it's found** (`src/tracker/risk_summary.py`): the start is a short heading containing "summary" and "risk" in the first 1,500 words. The end is the first of:
+  - the full section starting over with one of the summary's first 3 lines or its first category heading (Micron, Crown Castle, Gallagher);
+  - "For a more complete discussion..." / "the risks summarized above" (the summary's last line);
+  - "You should carefully consider..." (the full section's introduction);
+  - a bare "Risk Factors" title;
+  - a "Risks related to..." heading that never appears again, in a summary that had no category headings of its own (Autodesk).
+
+  Lines are compared ignoring case, punctuation and plural endings. A long paragraph (over 100 words) just before the end is the full section's introduction and is kept.
+- **How the rules were built:** a summary heading appears in 431 of the 3,046 sections (11% of FY2020 sections, about 19% by FY2024–2025, so not a one-time 2020–2021 effect). Each rule was added for a real case, then run on all 431, and every filing whose result changed was looked at. Rules we tried and rejected:
+  - "Any short line repeated from the summary." Alexandria repeats a closing sentence after each group, so this cut its summary short.
+  - "Any category heading that never appears again." This cut 90 summaries short, Regeneron after 6 lines, because many companies word their category headings differently in the summary and in the full section.
+- **Result:** the end is found for 421 of 431. For the other 8 (Alexandria FY2020–2025, Kenvue FY2023–2024) the summary and the full section use different headings, so nothing is removed. Both companies have the summary every year, so it can't create a first-appearance jump; they are listed for review.
+- **Hand-checked override:** Gallagher FY2023 starts its full section with a reworded first risk, so the rules stop about 530 words late. No general rule fixes this without breaking other filings. `data/reference/summary_overrides.csv` gives the first line after the summary for Gallagher FY2023 and FY2022 (same layout, one line off), with evidence. An override that isn't found stops the run.
+- **Known small error:** in some filings the full section's short introduction or its first category heading is removed along with the summary (one line). It happens the same way every year for a company, so its effect on change scores is small.
+- **Could affect results by:** a summary we don't detect (no "summary" heading, or one outside the first 1,500 words) stays in. If a company adds one, its main score shows a fake change in that year. The robustness score shows how much this matters overall.
+
+---
+
 ## Known limitations (to disclose)
 
 1. **Free price data drops delisted stocks.** Fixing membership doesn't fully fix survivorship bias. If a company went bankrupt, its 10-K may be in our data while its final price crash is missing. This needs WRDS/CRSP, or a clear disclosure. (Phase 4)
@@ -257,8 +290,9 @@ A small cleanup: a bare number in front of a title is no longer removed unless a
 - [x] Phase 2: review `reports/phase2_length_changes.csv` (27 cases; 26 real, Morgan Stanley fixed in v1.3)
 - [x] Phase 2: re-run with v1.3; exactly one change, as predicted (Morgan Stanley 2025, back to 10,574 words)
 - [x] Phase 2: hand-review 20 random extractions (seed 4689: 20 of 20 correct on start, end and cleanliness) and every remaining flagged case (5 `long`, all real)
-- [ ] Phase 3: sentence splitting must ignore line breaks (D-027 known issue)
-- [ ] Phase 3: decide whether to remove risk factor summaries (many companies added one in FY2020–2021, which would look like a big change)
+- [x] Phase 3: sentence splitting must ignore line breaks (D-027 known issue): done, D-028
+- [x] Phase 3: decide whether to remove risk factor summaries: removed for the main score, kept for a robustness score (D-029)
+- [ ] Phase 3: check the similarity definitions and text preparation against the *Lazy Prices* paper itself (no PDF in the project yet)
 - [ ] Phase 4: price data must follow ticker changes (e.g. Equity Residential became Vivmark Residential after its 2026 merger with AvalonBay; the ticker is expected to change from EQR)
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)

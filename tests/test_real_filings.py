@@ -8,6 +8,8 @@ changes don't break the tests; a wrong start or end would move them far more.
 
 The files are public SEC filings, stored compressed in tests/fixtures/filings/.
 """
+from __future__ import annotations
+
 import json
 import unittest
 from pathlib import Path
