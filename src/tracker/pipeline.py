@@ -11,15 +11,18 @@
   review-extractions   Phase 2: write a page of 20 random extractions to check by hand
   score                Phase 3: score how much each sample 10-K's Risk Factors changed from the prior year
   review-scores        Phase 3: write a page of pairs to check by hand
+  update               Phase 5: find, download, extract and score new 10-Ks from today's S&P 500 members
   all           universe -> map-tickers -> find-filings -> download -> summary
 """
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import sqlite3
 from collections import defaultdict
 from datetime import date, datetime
+from pathlib import Path
 
 from . import db
 from .config import ConfigError, get_user_agent, load_settings, project_path
@@ -31,6 +34,7 @@ from .extract_report import write_phase2_summary, write_review_page
 from .score import connect_changes, run_scoring
 from .score_report import write_phase3_summary, write_score_review_page
 from .wordlists import WordListError, load_word_lists, measure_change_words
+from .live import MemberListError, fetch_current_members, find_live_filings, load_approved, review_reasons
 from .header import api_minus_header_minutes, index_headers_url, parse_index_headers
 from .log_setup import setup_logging
 from .selection import mapping_problem, select_filings
@@ -283,13 +287,7 @@ def step_score(settings: dict, conn: sqlite3.Connection, tickers: list[str] | No
         ciks = _ciks_for_run(conn, tickers)[0] if tickers else None
         counts = run_scoring(conn, sconn, cconn, p["reference_dir"], ciks, force)
         log.info("Scoring done: %s", json.dumps(counts))
-        word_lists = settings["word_lists"]
-        lm_path = project_path(word_lists["lm_file"])
-        if lm_path.exists():
-            pairs = measure_change_words(cconn, load_word_lists(lm_path, word_lists["lm_sha256"]))
-            log.info("Word-list counts done for %d pairs (D-032)", pairs)
-        else:
-            log.warning("Word list not found (%s), so word-list counts were skipped. See README, 'Running Phase 3'.", lm_path)
+        _count_words(settings, cconn)
         print("\n" + write_phase3_summary(conn, cconn, p["reports_dir"]))
     finally:
         sconn.close()
@@ -306,6 +304,63 @@ def step_review_scores(settings: dict, conn: sqlite3.Connection, seed: int | Non
     finally:
         sconn.close()
         cconn.close()
+
+
+def _count_words(settings: dict, cconn: sqlite3.Connection) -> None:
+    """Loughran-McDonald counts (D-032), if the dictionary has been downloaded."""
+    word_lists = settings["word_lists"]
+    lm_path = project_path(word_lists["lm_file"])
+    if lm_path.exists():
+        pairs = measure_change_words(cconn, load_word_lists(lm_path, word_lists["lm_sha256"]))
+        log.info("Word-list counts done for %d pairs (D-032)", pairs)
+    else:
+        log.warning("Word list not found (%s), so word-list counts were skipped. See README, 'Running Phase 3'.", lm_path)
+
+
+def step_update(settings: dict, conn: sqlite3.Connection, client: EdgarClient) -> None:
+    """Phase 5: new 10-Ks from today's S&P 500 members, through every step (D-036, D-037)."""
+    p = paths(settings)
+    members = fetch_current_members(conn, p["reference_dir"] / "sources" / "live", get_user_agent())
+    found = find_live_filings(conn, client, members, p["raw_dir"], p["reference_dir"],
+                              settings["sample"]["start_fiscal_year"])
+    log.info("New filings: %s", json.dumps(found))
+    downloaded = download_pending(conn, client, p["raw_dir"], settings["sec"]["max_download_attempts"],
+                                  settings["download"]["exhibit_13"])
+    log.info("Download done: %d downloaded, %d failed", downloaded["downloaded"], downloaded["failed"])
+    sconn = connect_sections(p["sections_db"])
+    cconn = connect_changes(p["changes_db"])
+    try:
+        extracted = run_extraction(conn, sconn, p["raw_dir"])
+        log.info("Extraction done: %s", json.dumps(extracted))
+        scored = run_scoring(conn, sconn, cconn, p["reference_dir"])
+        log.info("Scoring done: %s", json.dumps(scored))
+        _count_words(settings, cconn)
+        print("\n" + write_live_review(conn, sconn, cconn, p["reports_dir"], p["reference_dir"], found))
+    finally:
+        sconn.close()
+        cconn.close()
+
+
+def write_live_review(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqlite3.Connection,
+                      reports_dir: Path, reference_dir: Path, found: dict) -> str:
+    """reports/live_review.csv: live filings to check before they go on the dashboard (D-037)."""
+    reasons = review_reasons(conn, sconn, cconn)
+    approved = load_approved(reference_dir)
+    names = dict(conn.execute("SELECT cik, name_current FROM companies").fetchall())
+    info = {r[0]: r[1:] for r in conn.execute("SELECT accession_number, company_cik, fiscal_year, filing_date, cik "
+                                               "FROM filings WHERE role = 'live'")}
+    to_check = [(acc, why) for acc, why in reasons.items() if why and acc not in approved]
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    with open(reports_dir / "live_review.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["accession_number", "company", "fiscal_year", "filing_date", "reasons", "edgar_index"])
+        for acc, why in sorted(to_check, key=lambda x: info[x[0]][2] or "", reverse=True):
+            company_cik, fy, filed, cik = info[acc]
+            writer.writerow([acc, names.get(company_cik), fy, filed, "; ".join(why),
+                             f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc.replace('-', '')}/{acc}-index.htm"])
+    return (f"Live update: {found['live']} new filings found ({found['failed_companies']} companies' lists failed). "
+            f"Live filings scored so far: {len(reasons)}; {len(to_check)} need a look before they go on the dashboard "
+            f"(reports/live_review.csv). Approve checked ones in data/reference/live_approved.csv.")
 
 
 def step_check_filers(settings: dict, conn: sqlite3.Connection) -> None:
@@ -333,7 +388,7 @@ def run(command: str, tickers: list[str] | None = None, seed: int | None = None,
     log.info("Command: %s%s. Log file: %s", command, f" (tickers: {','.join(tickers)})" if tickers else "", log_path)
     conn = db.connect(p["db"])
     try:
-        needs_sec = command in {"check", "map-tickers", "find-filings", "download", "all"}
+        needs_sec = command in {"check", "map-tickers", "find-filings", "download", "all", "update"}
         client = make_client(settings) if needs_sec else None
 
         if command == "check":
@@ -343,6 +398,10 @@ def run(command: str, tickers: list[str] | None = None, seed: int | None = None,
             return 0
         if command == "extract":
             step_extract(settings, conn, tickers, force)
+            return 0
+        if command == "update":
+            step_update(settings, conn, client)
+            log.info("SEC requests this run: %d (plus %d files read from cache)", client.requests_made, client.cache_hits)
             return 0
         if command == "score":
             step_score(settings, conn, tickers, force)
@@ -385,7 +444,7 @@ def run(command: str, tickers: list[str] | None = None, seed: int | None = None,
     except SecAccessDenied as exc:
         log.error(str(exc))
         return 2
-    except (RuntimeError, DownloadError, WordListError) as exc:
+    except (RuntimeError, DownloadError, WordListError, MemberListError) as exc:
         log.error(str(exc))
         return 1
     except KeyboardInterrupt:

@@ -212,7 +212,8 @@ def run_scoring(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqli
                 reference_dir: Path, ciks: list[int] | None = None, force: bool = False,
                 section: str = "item_1a") -> dict:
     """Score every sample filing that isn't scored yet (or whose texts changed)."""
-    sql = "SELECT accession_number, prior_accession FROM filings WHERE selected = 1 AND role = 'sample'"
+    # Research sample filings, plus new filings found by live mode (Phase 5, D-036)
+    sql = "SELECT accession_number, prior_accession FROM filings WHERE selected = 1 AND role IN ('sample', 'live')"
     params: list = []
     if ciks is not None:
         sql += f" AND company_cik IN ({','.join('?' * len(ciks))})"

@@ -356,6 +356,28 @@ Choices made 2026-10-25, **before any stock returns were downloaded or looked at
 
 ---
 
+## Phase 5: live tool and dashboard
+
+Choices made 2026-10-25. Rohan approved the recommended option for each question in the Phase 5 plan: a shareable website (GitHub Pages), public but without the Loughran–McDonald counts, updates run by hand, and today's S&P 500 list from Wikipedia.
+
+### D-036 Live updates: new filings never change the research sample
+- **Command:** `python run.py update`. It reads today's S&P 500 list from Wikipedia, fetches each member's filing list fresh from SEC, adds new 10-Ks, then downloads, extracts and scores them with exactly the Phase 1–3 rules.
+- **Today's list:** Wikipedia's table, which includes each company's SEC ID (CIK), so no ticker matching is needed. A list with fewer than 490 or more than 520 rows, or more than 5 rows without a CIK, is refused (the page layout may have changed). Each day's list is kept in the `live_members` table and as a CSV in `data/reference/sources/live/`.
+- **Which filings:** the Phase 1 rules (`select_filings`: originals only, one per period, fiscal-year labels, prior-year link). Every current member counts as a member on every date, which is only right for today. That's fine because live mode only adds filings not already stored, and those are the newest ones. A company new to the index brings its 10-Ks from fiscal 2021 on, so it has a history on the dashboard.
+- **Kept apart from the research:** new rows get role `live` (scored) or `live_comparison` (prior year only). Rows with role `sample` or `comparison` are never changed, and Phase 3's report and Phase 4 read only `sample`. So the research results, including the Phase 4 test fixed in advance, can't move as live data grows.
+- **Ticker moves (D-018):** the live code uses `predecessors.csv` like Phase 1, so a company that moved to a new SEC ID keeps its prior-year filing.
+
+### D-037 New filings are checked before they reach the dashboard
+- A live filing goes on `reports/live_review.csv`, and stays off the dashboard, if:
+  - its extraction isn't `ok` (flagged, not found or an error);
+  - it couldn't be scored;
+  - it's a voice switch (D-031);
+  - its cosine or Jaccard similarity is below the research sample's 1st percentile. Changes that extreme are where extraction errors showed up in Phases 2–3.
+- **After checking one by hand,** add it to `data/reference/live_approved.csv` (accession number and a note); it then appears on the dashboard. A filing with real problems stays off until the rules are fixed.
+- **Why:** Phase 2's rules were tested on the research sample. A new layout can break them, and a broken extraction looks exactly like a big change: the thing the dashboard highlights.
+
+---
+
 ## Known limitations (to disclose)
 
 0. **(Phase 2, found in the Phase 3 review)** Constellation Brands' sections end with a leftover page header ("PART I OTHER KEY INFORMATION Table of Contents") that the D-021 cleaning missed. It's in every year, so it barely affects change scores.

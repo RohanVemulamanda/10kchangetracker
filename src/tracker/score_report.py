@@ -25,7 +25,7 @@ def load_scores(conn: sqlite3.Connection, cconn: sqlite3.Connection) -> pd.DataF
     changes = pd.read_sql_query("SELECT * FROM changes", cconn)
     changes["flags"] = changes["flags"].fillna("")   # empty, not NaN (NaN would count as "true")
     filings = pd.read_sql_query(
-        "SELECT f.accession_number, f.company_cik, f.fiscal_year, f.filing_date, f.member_tickers, "
+        "SELECT f.accession_number, f.company_cik, f.fiscal_year, f.filing_date, f.member_tickers, f.role, "
         "f.prior_gap_days, c.name_current AS company FROM filings f LEFT JOIN companies c ON c.cik = f.company_cik "
         "WHERE f.selected = 1", conn)
     return changes.merge(filings, on="accession_number", how="left")
@@ -39,6 +39,7 @@ def describe(values: pd.Series) -> str:
 def write_phase3_summary(conn: sqlite3.Connection, cconn: sqlite3.Connection, reports_dir: Path) -> str:
     reports_dir.mkdir(parents=True, exist_ok=True)
     df = load_scores(conn, cconn)
+    df = df[df.role == "sample"]          # the research sample only; live filings (Phase 5) are reported separately
     main = df[df.version == "main"]
     ok = df[df.status == "ok"]
     ok_main = ok[ok.version == "main"]
@@ -84,6 +85,8 @@ def write_phase3_summary(conn: sqlite3.Connection, cconn: sqlite3.Connection, re
         out.append(f"| {m[4:]} | {paired[m].rank().corr(paired[m + '_ws'].rank()):.3f} | {moved:,} |")
 
     summaries = pd.read_sql_query("SELECT * FROM risk_summaries", cconn)
+    research = set(ok_main.accession_number) | set(ok_main.prior_accession)
+    summaries = summaries[summaries.accession_number.isin(research)]
     out += ["", "## Risk factor summaries (D-029)", "",
             f"Sections with a summary heading, among the filings scored (current or prior year): {len(summaries):,}", ""]
     for rule, n in summaries.rule.value_counts().items():
@@ -161,6 +164,7 @@ def write_score_review_page(conn: sqlite3.Connection, sconn: sqlite3.Connection,
     esc = html.escape
     seed = seed if seed is not None else random.randrange(10_000)
     scores = load_scores(conn, cconn)
+    scores = scores[scores.role == "sample"]
     info = {r["accession_number"]: dict(r) for r in sconn.execute(
         "SELECT accession_number, method, source_document, scoring_text FROM sections WHERE section = 'item_1a'")}
     summaries = {r["accession_number"]: dict(r) for r in cconn.execute("SELECT * FROM risk_summaries")}

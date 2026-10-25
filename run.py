@@ -31,11 +31,12 @@ COMMANDS = {
     "review-extractions": "Phase 2: write reports/phase2_review.html with 20 random extractions to check by hand.",
     "score": "Phase 3: score how much each sample 10-K's Risk Factors changed from the prior year. Safe to stop and restart.",
     "review-scores": "Phase 3: write reports/phase3_review.html with pairs to check by hand.",
+    "update": "Phase 5: find, download, extract and score new 10-Ks from today's S&P 500 members.",
 }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="10-K Change Tracker (Phase 1: data collection, Phase 2: extraction, Phase 3: change scores)")
+    parser = argparse.ArgumentParser(description="10-K Change Tracker (Phases 1-3: build the research data; Phase 5: live updates)")
     subcommands = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
         sub = subcommands.add_parser(name, help=help_text)
