@@ -270,8 +270,14 @@ def run(command: str, tickers: list[str] | None = None, seed: int | None = None)
     except SecAccessDenied as exc:
         log.error(str(exc))
         return 2
-    except RuntimeError as exc:
+    except (RuntimeError, DownloadError) as exc:
         log.error(str(exc))
+        return 1
+    except KeyboardInterrupt:
+        log.warning("Stopped by you. Progress is saved; run the same command again to continue.")
+        return 130
+    except Exception:
+        log.exception("Unexpected error (full details are in the log file: %s)", log_path)
         return 1
     finally:
         conn.close()
