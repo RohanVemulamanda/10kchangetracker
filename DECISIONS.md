@@ -50,6 +50,7 @@ Every choice that could change the results is recorded here: what we chose, what
 - **Chose:** Read the acceptance time from each filing's header page (`...-index-headers.html`), not from the submissions API's `acceptanceDateTime` field. Both are stored, and the difference between them is recorded.
 - **Why:** The API field is labeled UTC, but other developers have documented it being off by hours for some filers ([edgartools PR #1502](https://github.com/dgunning/edgartools/pull/1502)). Phase 4 decides whether a filing counts on the same trading day or the next one, so a wrong time means look-ahead bias.
 - **Cost:** One extra request per filing.
+- **Result (first full run, 2026-10-24):** the API time and the header time agreed for all 2,877 downloaded filings. The documented problem didn't appear in our sample. We keep using the header anyway: it is the official record, and checking cost little. The more important finding: 1,415 of 2,364 sample 10-Ks (60%) were accepted at or after 4:00 pm Eastern, so the after-close rule in Phase 4 affects most of the sample.
 
 ### D-009 Ticker → company (CIK) mapping
 - **Chose:** In this order: (1) hand-checked fixes in `data/reference/manual_cik_map.csv`, (2) SEC's current ticker file, (3) Wikipedia's current S&P list (which includes CIKs). Anything still unmapped is reported, never guessed.
