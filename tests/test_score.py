@@ -7,7 +7,7 @@ import helpers  # noqa: F401
 from tracker import db
 from tracker.extract import connect_sections
 from tracker.score import connect_changes, run_scoring
-from tracker.score_report import write_phase3_summary
+from tracker.score_report import write_phase3_summary, write_score_review_page
 
 BODY = ("Risks Related to Our Business\n"
         "Demand for our products may fall. Our costs could rise sharply in fiscal 2024.\n"
@@ -45,8 +45,9 @@ class Scoring(unittest.TestCase):
         self.conn.execute("INSERT INTO filings (accession_number, cik, company_cik, fiscal_year, role, selected, status, "
                           "prior_accession) VALUES (?, ?, ?, ?, ?, 1, 'downloaded', ?)", (acc, cik, cik, fy, role, prior))
         self.conn.commit()
-        self.sconn.execute("INSERT INTO sections (accession_number, section, status, scoring_text) VALUES (?, 'item_1a', 'ok', ?)",
-                           (acc, text))
+        self.sconn.execute("INSERT INTO sections (accession_number, section, status, method, source_document, scoring_text) "
+                           "VALUES (?, 'item_1a', 'ok', ?, ?, ?)",
+                           (acc, "heading" if acc == "a20" else "item", f"filings/{cik}/{acc}/doc.htm.gz", text))
         self.sconn.commit()
 
     def run_scoring(self, **kwargs):
@@ -124,6 +125,16 @@ class Scoring(unittest.TestCase):
         self.assertIn("| Scored | 2 |", text)
         for name in ("phase3_summary.md", "phase3_scores.csv", "phase3_summaries.csv"):
             self.assertTrue((self.reports / name).exists(), name)
+
+    def test_review_page(self):
+        self.run_scoring()
+        path, seed = write_score_review_page(self.conn, self.sconn, self.cconn, self.reports, how_many=1, seed=5)
+        page = path.read_text()
+        self.assertEqual(seed, 5)
+        self.assertIn("ACME CORP (None) FY2020 -&gt; FY2021", page)   # a21 compares with a20 (heading method)
+        self.assertIn("Every pair with a fallback-method extraction (1)", page)
+        self.assertIn("removed 19 words", page)                        # the 4-line summary in a21
+        self.assertIn("We depend on a few large customers.</div>", page)  # "Ends" skips the blank last line
 
 
 if __name__ == "__main__":

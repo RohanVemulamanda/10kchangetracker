@@ -30,6 +30,7 @@ COMMANDS = {
     "extract": "Phase 2: extract Item 1A (Risk Factors) from every downloaded 10-K. Safe to stop and restart.",
     "review-extractions": "Phase 2: write reports/phase2_review.html with 20 random extractions to check by hand.",
     "score": "Phase 3: score how much each sample 10-K's Risk Factors changed from the prior year. Safe to stop and restart.",
+    "review-scores": "Phase 3: write reports/phase3_review.html with pairs to check by hand.",
 }
 
 
@@ -40,7 +41,7 @@ def main() -> int:
         sub = subcommands.add_parser(name, help=help_text)
         if name in {"find-filings", "download", "all", "extract", "score"}:
             sub.add_argument("--tickers", help="Only these tickers, comma-separated (for trial runs), e.g. AAPL,JPM,META")
-        if name in {"spot-check", "review-extractions"}:
+        if name in {"spot-check", "review-extractions", "review-scores"}:
             sub.add_argument("--seed", type=int, help="Pick the same random filings as a previous check")
         if name in {"extract", "score"}:
             sub.add_argument("--force", action="store_true", help="Redo every filing, even ones already done")

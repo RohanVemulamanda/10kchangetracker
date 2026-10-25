@@ -10,6 +10,7 @@
   extract              Phase 2: extract Item 1A (Risk Factors) from every downloaded 10-K
   review-extractions   Phase 2: write a page of 20 random extractions to check by hand
   score                Phase 3: score how much each sample 10-K's Risk Factors changed from the prior year
+  review-scores        Phase 3: write a page of pairs to check by hand
   all           universe -> map-tickers -> find-filings -> download -> summary
 """
 from __future__ import annotations
@@ -28,7 +29,7 @@ from .cover import check_filers
 from .extract import connect_sections, run_extraction
 from .extract_report import write_phase2_summary, write_review_page
 from .score import connect_changes, run_scoring
-from .score_report import write_phase3_summary
+from .score_report import write_phase3_summary, write_score_review_page
 from .header import api_minus_header_minutes, index_headers_url, parse_index_headers
 from .log_setup import setup_logging
 from .selection import mapping_problem, select_filings
@@ -287,6 +288,18 @@ def step_score(settings: dict, conn: sqlite3.Connection, tickers: list[str] | No
         cconn.close()
 
 
+def step_review_scores(settings: dict, conn: sqlite3.Connection, seed: int | None) -> None:
+    p = paths(settings)
+    sconn = connect_sections(p["sections_db"])
+    cconn = connect_changes(p["changes_db"])
+    try:
+        path, used_seed = write_score_review_page(conn, sconn, cconn, p["reports_dir"], seed=seed)
+        print(f"Review page written (seed {used_seed}). Open it in your browser:\n  {path}")
+    finally:
+        sconn.close()
+        cconn.close()
+
+
 def step_check_filers(settings: dict, conn: sqlite3.Connection) -> None:
     """List sample 10-Ks whose company looks too small to be in the S&P 500 (a reused ticker)."""
     p = paths(settings)
@@ -325,6 +338,9 @@ def run(command: str, tickers: list[str] | None = None, seed: int | None = None,
             return 0
         if command == "score":
             step_score(settings, conn, tickers, force)
+            return 0
+        if command == "review-scores":
+            step_review_scores(settings, conn, seed)
             return 0
         if command == "review-extractions":
             step_review(settings, conn, seed)
