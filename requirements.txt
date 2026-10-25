@@ -1,8 +1,9 @@
-# Python 3.10 or newer.
+# Python 3.9 or newer.
 # Install with:  pip install -r requirements.txt
 
 requests>=2.31,<3        # downloading from SEC EDGAR
 pandas>=2.1              # tables and CSV reports
+numpy>=1.24              # fast edit distance (Phase 3); also installed with pandas
 PyYAML>=6.0              # reading config/settings.yaml
 python-dotenv>=1.0       # reading your name/email from .env
 lxml>=4.9                # reading 10-K HTML (Phase 2)

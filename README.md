@@ -11,13 +11,13 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**. Start
 | 0 | Project setup | Done |
 | 1 | Download 10-Ks for historical S&P 500 members | **Done**: 2,494 sample + 552 comparison 10-Ks, verified ([report](docs/phase1_report.md)) |
 | 2 | Extract Item 1A (Risk Factors) | **Done**: all 2,494 sample filings extracted; 20 of 20 correct in the hand review ([report](docs/phase2_report.md)) |
-| 3 | Change scores | Not started |
+| 3 | Change scores | **In progress**: text preparation, summary removal, the four measures and the scoring run are built; full run and review under way |
 | 4 | Backtest | Not started |
 | 5 | Live tool and dashboard | Not started |
 
 ## Setup (one time)
 
-You need Python 3.10 or newer and git.
+You need Python 3.9 or newer and git.
 
 **Mac (Terminal):**
 ```bash
@@ -76,6 +76,20 @@ python run.py review-extractions               # writes reports/phase2_review.ht
 - `python run.py check-filers` lists sample 10-Ks from companies too small to be S&P 500 members (catches reused tickers, D-025).
 - `python run.py extract --force` redoes everything (after changing the extraction rules, bump `EXTRACTOR_VERSION` in `src/tracker/extract.py` instead).
 
+## Running Phase 3 (change scores)
+
+```bash
+python run.py score --tickers AAPL,AJG,MU   # trial on three companies (seconds)
+python run.py score                          # every sample 10-K (about 40 minutes); safe to stop and restart
+python run.py review-scores                  # writes reports/phase3_review.html: pairs to check by hand
+```
+
+- Each sample 10-K's Risk Factors are compared with the prior year's, twice: with risk factor summaries removed (the main score) and kept (a robustness check) (DECISIONS.md D-029).
+- Four similarity measures, from 0 (nothing in common) to 1 (identical): cosine, Jaccard, minimum edit and simple (D-030). Change = 1 - similarity.
+- Results go to `data/processed/changes.db`: table `changes` (the scores), `changed_sentences` (what was added and removed) and `risk_summaries` (what summary removal did).
+- `reports/phase3_summary.md` has coverage, the spread of each measure and the biggest changes; `reports/phase3_scores.csv` has every score, for Excel; `reports/phase3_summaries.csv` lists every summary found.
+- A pair is scored again automatically if either year's text changes (for example after a new extraction). After changing the scoring rules, bump `SCORER_VERSION` in `src/tracker/score.py`.
+
 ## Checking Phase 1 is correct
 
 1. **Hand-check 10 random filings.** Run `python run.py spot-check`. It prints 10 random downloaded filings with what we stored, plus a link to each one's EDGAR page. Open each link and compare the filing date, "Accepted" time, and "Period of Report" with our values.
@@ -117,12 +131,18 @@ src/tracker/             the code, one file per job:
   sections.py              Phase 2: find and clean Item 1A
   extract.py               Phase 2: run the extraction over all filings
   extract_report.py        Phase 2: summary, flagged list, review page
+  textprep.py              Phase 3: sentences and words (line breaks ignored)
+  risk_summary.py          Phase 3: find and remove the risk factor summary
+  similarity.py            Phase 3: the four similarity measures
+  score.py                 Phase 3: score every sample 10-K against its prior year
+  score_report.py          Phase 3: summary, score list, review page
   pipeline.py              runs the steps in order
 tests/                   unit tests (never contact SEC); tests/fixtures/filings/ holds 9 real 10-Ks (public SEC filings)
 data/reference/          membership periods and hand-checked fixes (committed):
   manual_cik_map.csv       tickers SEC's file can't map, with evidence
   not_on_edgar.csv         companies whose 10-Ks aren't on EDGAR
   predecessors.csv         companies that moved to a new SEC ID
+  summary_overrides.csv    hand-checked risk-summary ends the rules get wrong
 data/raw/                downloaded filings (not committed)
 data/tracker.db          SQLite database (not committed)
 reports/                 summaries and gap lists
