@@ -15,6 +15,7 @@ Not published: the Loughran-McDonald counts (free for academic use only, D-032).
 from __future__ import annotations
 
 import bisect
+import difflib
 import json
 import shutil
 import sqlite3
@@ -23,11 +24,57 @@ from datetime import datetime
 from pathlib import Path
 
 from .live import load_approved, review_reasons
+from .textprep import words
 from .wordlists import new_and_dropped
 
 ASSETS = Path(__file__).resolve().parent / "site_assets"
 SEASON_TOP = 25
 MEASURES = ("sim_cosine", "sim_jaccard", "sim_min_edit", "sim_simple")
+EDIT_OVERLAP = 0.5       # a new and a dropped sentence sharing half their distinct words = one edited sentence
+EDITS_SHOWN = 15         # per filing; the count is always shown, the rest are on EDGAR
+
+
+def split_changes(added: list[str], removed: list[str]) -> tuple[list[str], list[str], list[tuple[str, str]]]:
+    """Sort a filing's changed sentences into (genuinely new, genuinely dropped, edited pairs).
+
+    Moved sentences are left out first (D-030). Then a new sentence and a dropped one that share
+    at least half their distinct words (Jaccard >= 0.5) are paired as one edited sentence. Pairs are
+    made best match first, each sentence used once. Edited pairs keep the new sentence's order.
+    """
+    new, dropped = new_and_dropped(added, removed)
+    new_words = [set(words(s)) for s in new]
+    dropped_words = [set(words(s)) for s in dropped]
+    candidates = []
+    for i, a in enumerate(new_words):
+        for j, b in enumerate(dropped_words):
+            union = len(a | b)
+            overlap = len(a & b) / union if union else 0
+            if overlap >= EDIT_OVERLAP:
+                candidates.append((-overlap, i, j))
+    used_new, used_dropped, pairs = set(), set(), {}
+    for _, i, j in sorted(candidates):
+        if i not in used_new and j not in used_dropped:
+            used_new.add(i)
+            used_dropped.add(j)
+            pairs[i] = j
+    edits = [(dropped[pairs[i]], new[i]) for i in sorted(pairs)]
+    return ([s for i, s in enumerate(new) if i not in used_new],
+            [s for j, s in enumerate(dropped) if j not in used_dropped], edits)
+
+
+def word_diff(old: str, new: str) -> list[list[str]]:
+    """The edit as segments: ["=", "kept words"], ["-", "removed words"], ["+", "added words"]."""
+    a, b = old.split(), new.split()
+    segments = []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag == "equal":
+            segments.append(["=", " ".join(a[i1:i2])])
+            continue
+        if i2 > i1:
+            segments.append(["-", " ".join(a[i1:i2])])
+        if j2 > j1:
+            segments.append(["+", " ".join(b[j1:j2])])
+    return segments
 
 
 def edgar_url(cik: int, accession: str) -> str:
@@ -101,7 +148,7 @@ def build_site(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqlit
                                                  "AND kind = 'added' ORDER BY position", (f["accession_number"],))]
             removed = [t for (t,) in cconn.execute("SELECT text FROM changed_sentences WHERE accession_number = ? "
                                                    "AND kind = 'removed' ORDER BY position", (f["accession_number"],))]
-            new, dropped = new_and_dropped(added, removed)
+            new, dropped, edits = split_changes(added, removed)
             years.append({
                 "accession": f["accession_number"], "fiscal_year": f["fiscal_year"],
                 "prior_fiscal_year": f["prior_fiscal_year"], "filing_date": f["filing_date"],
@@ -111,9 +158,10 @@ def build_site(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqlit
                 "scores": {m[4:]: round(f[m], 4) for m in MEASURES},
                 "change_percentile": f["change_percentile"],
                 "words": [f["prior_words"], f["current_words"]],
-                "kept": f["sentences_kept"], "moved": len(added) - len(new),
+                "kept": f["sentences_kept"], "moved": len(added) - len(new) - len(edits),
                 "flags": f["flags"], "summary_removed": summaries.get(f["accession_number"]) is not None,
                 "new": new, "dropped": dropped,
+                "edits": {"count": len(edits), "shown": [word_diff(old, new_) for old, new_ in edits[:EDITS_SHOWN]]},
             })
         latest = years[-1]
         companies.append({"cik": cik, "name": name, "tickers": tickers,

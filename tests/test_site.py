@@ -8,7 +8,7 @@ import helpers  # noqa: F401
 from tracker import db
 from tracker.extract import connect_sections
 from tracker.score import connect_changes
-from tracker.site import build_site, change_percentile
+from tracker.site import build_site, change_percentile, split_changes, word_diff
 
 
 class Percentile(unittest.TestCase):
@@ -17,6 +17,28 @@ class Percentile(unittest.TestCase):
         self.assertEqual(change_percentile(0.90, research), 80.0)   # 4 of 5 are more similar (changed less)
         self.assertEqual(change_percentile(1.00, research), 0.0)
         self.assertEqual(change_percentile(0.80, research), 100.0)
+
+
+class Changes(unittest.TestCase):
+    def test_split_into_new_dropped_and_edited(self):
+        added = ["Demand for our chips may fall sharply in 2025.", "We now face risks from artificial intelligence.",
+                 "Moved sentence stays put."]
+        removed = ["Moved sentence stays put.", "Demand for our chips may fall in 2024.", "The pandemic hurt our stores."]
+        new, dropped, edits = split_changes(added, removed)
+        self.assertEqual(new, ["We now face risks from artificial intelligence."])
+        self.assertEqual(dropped, ["The pandemic hurt our stores."])
+        self.assertEqual(edits, [("Demand for our chips may fall in 2024.", "Demand for our chips may fall sharply in 2025.")])
+
+    def test_each_sentence_is_paired_once_best_match_first(self):
+        added = ["Rates may rise and hurt our loans.", "Rates may rise and hurt our deposits."]
+        removed = ["Rates may rise and hurt our deposits too."]
+        new, dropped, edits = split_changes(added, removed)
+        self.assertEqual(edits, [("Rates may rise and hurt our deposits too.", "Rates may rise and hurt our deposits.")])
+        self.assertEqual((new, dropped), (["Rates may rise and hurt our loans."], []))
+
+    def test_word_diff(self):
+        self.assertEqual(word_diff("Demand may fall in 2024.", "Demand may fall sharply in 2025."),
+                         [["=", "Demand may fall"], ["+", "sharply"], ["=", "in"], ["-", "2024."], ["+", "2025."]])
 
 
 class BuildSite(unittest.TestCase):
@@ -72,6 +94,7 @@ class BuildSite(unittest.TestCase):
         self.assertEqual([y["fiscal_year"] for y in company["years"]], [2021, 2022])   # the extreme live one is held back
         fy21 = company["years"][0]
         self.assertEqual((fy21["new"], fy21["dropped"], fy21["moved"]), (["A brand new risk."], ["An old risk."], 1))
+        self.assertEqual(fy21["edits"], {"count": 0, "shown": []})
         self.assertEqual(fy21["prior_fiscal_year"], 2020)
         self.assertEqual(read("companies.json")[0]["name"], "ACME CORP")
 

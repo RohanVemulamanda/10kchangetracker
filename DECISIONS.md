@@ -391,6 +391,7 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 - **Why a rank, not the raw score:** cosine sits between 0.98 and 1.00 for nearly every filing (D-030), and "0.9847" means nothing to a reader. The rank is computed against the research sample only, so it doesn't drift as live filings arrive.
 - **Not published:** the Loughran–McDonald counts (free for academic research only, D-032). Live filings on the review list (D-037) are held back until approved.
 - **Built safely:** no outside libraries; all text from filings is inserted as plain text, never as HTML, so nothing in a 10-K can run as code on the page. Data is split into one file per company (loaded when clicked), so the page stays fast.
+- **New, dropped and edited sentences:** 62% of "new" sentences turned out to be light edits of a dropped one. A new and a dropped sentence sharing at least half their distinct words are shown as one **edited** sentence, with the changed words marked (best match first, each sentence used once). The count is always shown; the first 15 edits are listed. "New risk language" and "Dropped" list everything without a close match. This also cut the site from 144 MB to 60 MB (largest company file 0.8 MB).
 - **Publishing:** the built site goes on a separate `gh-pages` branch, not `main`. **Nothing is published until Rohan has looked at it locally and says so.**
 
 ---

@@ -99,3 +99,10 @@ tr.selected td { background: var(--accent-soft); }
 details summary { cursor: pointer; color: var(--accent); }
 .foot { color: var(--muted); font-size: 0.85rem; padding-block: 10px 40px; border-top: 1px solid var(--line); }
 .loading { color: var(--muted); }
+
+.edits { margin-top: 18px; }
+.edits ol { margin: 0; padding: 0; list-style: none; max-height: 520px; overflow-y: auto; }
+.edits li { padding: 8px 10px; margin-bottom: 6px; border-radius: 6px; font-size: 0.94rem; background: var(--bg);
+            border-left: 3px solid var(--line); }
+ins { background: var(--new-soft); color: var(--new); text-decoration: none; font-weight: 600; border-radius: 3px; padding: 0 2px; }
+del { background: var(--old-soft); color: var(--old); border-radius: 3px; padding: 0 2px; }

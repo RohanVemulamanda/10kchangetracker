@@ -164,6 +164,16 @@ function chart(years, selected, onPick) {
   return svg;
 }
 
+function editList(edits) {
+  const shown = edits.shown.map(segments => el("li", {}, ...segments.map(([op, text]) =>
+    op === "=" ? document.createTextNode(` ${text} `) : el(op === "+" ? "ins" : "del", { text }))));
+  const more = edits.count - edits.shown.length;
+  return el("div", { class: "edits" },
+    el("h3", { text: `Edited (${fmt(edits.count)})` }),
+    edits.count ? el("ol", {}, ...shown) : el("p", { class: "note", text: "No sentences were edited." }),
+    more > 0 ? el("p", { class: "note", text: `${fmt(more)} more edited sentences; see the filings on EDGAR.` }) : null);
+}
+
 function sentenceList(cls, title, items, empty) {
   return el("div", { class: cls },
     el("h3", { class: cls, text: `${title} (${fmt(items.length)})` }),
@@ -183,14 +193,17 @@ function renderYear(company, d) {
           ["Simple", d.scores.simple.toFixed(3)], ["Words", `${fmt(d.words[0])} → ${fmt(d.words[1])}`]]
         .map(([k, v]) => el("div", { class: "stat" }, el("div", { class: "k", text: k }), el("div", { class: "v", text: v })))),
     el("p", { class: "note" },
-      `Filed ${d.filing_date}. ${fmt(d.kept)} sentences unchanged; ${fmt(d.moved)} only moved (not listed). `,
+      `Filed ${d.filing_date}. ${fmt(d.kept)} sentences unchanged; ${fmt(d.moved)} only moved (not listed). `
+      + "\u201cNew\u201d and \u201cDropped\u201d are sentences with no close match in the other year; "
+      + "a sentence reworded but sharing at least half its words is under \u201cEdited\u201d. ",
       el("a", { href: d.edgar, target: "_blank", rel: "noopener", text: `FY${d.fiscal_year} filing` }),
       d.prior_edgar ? " · " : null,
       d.prior_edgar ? el("a", { href: d.prior_edgar, target: "_blank", rel: "noopener", text: `FY${d.prior_fiscal_year} filing` }) : null,
       " (SEC EDGAR)"),
     el("div", { class: "diff" },
-      sentenceList("old", "Dropped", d.dropped, "No sentences were dropped."),
-      sentenceList("new", "New", d.new, "No new sentences.")));
+      sentenceList("new", "New risk language", d.new, "No new sentences."),
+      sentenceList("old", "Dropped", d.dropped, "No sentences were dropped.")),
+    editList(d.edits));
   const old = document.getElementById("year");
   if (old) old.replaceWith(box); else main.append(box);
 }
@@ -227,7 +240,8 @@ async function renderCompany(cik, wantYear) {
       el("td", { class: "num", text: d.scores.jaccard.toFixed(3) }),
       el("td", { class: "num", text: d.scores.min_edit.toFixed(3) }),
       el("td", { class: "num", text: fmt(d.new.length) }),
-      el("td", { class: "num", text: fmt(d.dropped.length) }))));
+      el("td", { class: "num", text: fmt(d.dropped.length) }),
+      el("td", { class: "num", text: fmt(d.edits.count) }))));
     renderYear(company, selected);
   }
   main.replaceChildren(
@@ -238,8 +252,8 @@ async function renderCompany(cik, wantYear) {
     el("div", { class: "card table-scroll" }, el("table", {},
       el("thead", {}, el("tr", {}, el("th", { text: "Year" }), el("th", { text: "Changed more than" }),
         el("th", { class: "num", text: "Cosine" }), el("th", { class: "num", text: "Jaccard" }),
-        el("th", { class: "num", text: "Min edit" }), el("th", { class: "num", text: "New sentences" }),
-        el("th", { class: "num", text: "Dropped" }))), tableBody)));
+        el("th", { class: "num", text: "Min edit" }), el("th", { class: "num", text: "New" }),
+        el("th", { class: "num", text: "Dropped" }), el("th", { class: "num", text: "Edited" }))), tableBody)));
   draw();
   main.focus();
 }
