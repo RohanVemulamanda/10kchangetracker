@@ -57,6 +57,10 @@ CATEGORY_HEADING = re.compile(
     re.IGNORECASE)
 
 
+class OverrideNotFound(ValueError):
+    """A hand-checked summary end (summary_overrides.csv) isn't in the text any more."""
+
+
 @dataclass
 class Summary:
     start: int          # first line of the summary (its heading)
@@ -144,7 +148,7 @@ def remove_summary(text: str, end_override: str | None = None) -> tuple[str, Sum
         start = found.start if found else -1
         end = next((j for j in range(start + 1, len(lines)) if lines[j].startswith(end_override)), None)
         if found is None or end is None:
-            raise ValueError(f"summary override not found: {end_override!r}")
+            raise OverrideNotFound(f"summary override not found: {end_override!r}")
         found = Summary(found.start, end, "override")
     if found is None or found.end is None:
         return text, found
