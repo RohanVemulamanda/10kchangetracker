@@ -118,9 +118,15 @@ def build_site(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqlit
     filings = shown_filings(conn, sconn, cconn, reference_dir)
     research = sorted(f["sim_cosine"] for f in filings if f["role"] == "sample")
     names = {r[0]: r[1:] for r in conn.execute("SELECT cik, name_current, sic_description FROM companies")}
-    sectors = dict(conn.execute(
-        "SELECT cik, sector FROM live_members WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM live_members)"
-    ).fetchall()) if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'live_members'").fetchone() else {}
+    # Current members get Wikipedia's sector and readable name ("JPMorgan Chase", not "JPMORGAN CHASE & CO");
+    # companies no longer in the index keep SEC's name (tidied up on the page).
+    current = {r[0]: (r[1], r[2]) for r in conn.execute(
+        "SELECT cik, sector, name FROM live_members WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM live_members)"
+    )} if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'live_members'").fetchone() else {}
+    sectors = {cik: sector for cik, (sector, _) in current.items()}
+    for cik, (_, wiki_name) in current.items():
+        sic_description = names.get(cik, (None, None))[1]
+        names[cik] = (wiki_name, sic_description)
     summaries = {r[0]: r[1] for r in cconn.execute("SELECT accession_number, words_removed FROM risk_summaries "
                                                     "WHERE end_line IS NOT NULL")}
 

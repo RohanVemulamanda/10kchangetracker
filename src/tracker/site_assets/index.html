@@ -4,31 +4,47 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>10-K Change Tracker</title>
-<meta name="description" content="How much S&P 500 companies rewrite the Risk Factors in their 10-K each year, and what changed.">
+<meta name="description" content="How much S&P 500 companies rewrite the Risk Factors in their 10-K each year, and exactly what changed.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="top">
-  <div class="wrap">
-    <a class="brand" href="#">10-K Change Tracker</a>
-    <p class="tagline">How much each S&amp;P 500 company rewrote the Risk Factors in its annual report, and exactly what changed.</p>
+<div class="backdrop" aria-hidden="true">
+  <span class="orb orb-a"></span><span class="orb orb-b"></span><span class="orb orb-c"></span>
+  <span class="grid-lines"></span>
+</div>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#" aria-label="10-K Change Tracker, home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M5 4h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 13h8M8 17h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8 9h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </span>
+      <span>10-K Change Tracker</span>
+    </a>
     <div class="search">
       <label for="q" class="visually-hidden">Find a company</label>
-      <input id="q" type="search" placeholder="Find a company or ticker (e.g. Apple, JPM)" autocomplete="off">
+      <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="q" type="search" placeholder="Search a company or ticker" autocomplete="off" aria-controls="suggestions">
+      <kbd class="search-key" aria-hidden="true">/</kbd>
       <ul id="suggestions" role="listbox" hidden></ul>
     </div>
   </div>
 </header>
 
-<main class="wrap" id="main" tabindex="-1">
-  <p class="loading">Loading…</p>
+<main id="main" tabindex="-1">
+  <div class="wrap"><div class="skeleton"></div></div>
 </main>
 
-<footer class="wrap foot">
-  <p>Data: SEC EDGAR 10-K filings, Item 1A (Risk Factors). Method after Cohen, Malloy &amp; Nguyen,
-  <em>Lazy Prices</em> (Journal of Finance, 2020). Every choice is documented in the project's DECISIONS.md.
-  Not investment advice.</p>
-  <p id="built"></p>
+<footer class="foot">
+  <div class="wrap">
+    <p>Data: SEC EDGAR 10-K filings, Item 1A (Risk Factors). Method after Cohen, Malloy &amp; Nguyen,
+    <em>Lazy Prices</em> (Journal of Finance, 2020). Every choice is documented in the project's DECISIONS.md.
+    Not investment advice.</p>
+    <p id="built"></p>
+  </div>
 </footer>
 <script src="app.js"></script>
 </body>

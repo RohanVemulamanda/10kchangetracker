@@ -392,6 +392,13 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 - **Not published:** the Loughran–McDonald counts (free for academic research only, D-032). Live filings on the review list (D-037) are held back until approved.
 - **Built safely:** no outside libraries; all text from filings is inserted as plain text, never as HTML, so nothing in a 10-K can run as code on the page. Data is split into one file per company (loaded when clicked), so the page stays fast.
 - **New, dropped and edited sentences:** 62% of "new" sentences turned out to be light edits of a dropped one. A new and a dropped sentence sharing at least half their distinct words are shown as one **edited** sentence, with the changed words marked (best match first, each sentence used once). The count is always shown; the first 15 edits are listed. "New risk language" and "Dropped" list everything without a close match. This also cut the site from 144 MB to 60 MB (largest company file 0.8 MB).
+- **Design (redone 2026-10-25 at Rohan's request: "more layered, nicer, with animations"):**
+  - a frosted top bar, a hero with slowly drifting coloured light, and glass-style cards with depth;
+  - count-up stats, a podium for the top 3 with animated rank rings, and a list showing how much each section grew or shrank;
+  - a company chart that draws itself, with hover tooltips; a rank gauge; tabs for new, dropped and edited sentences.
+  - Every animation switches off for visitors whose system asks to reduce motion, and both light and dark themes are supported.
+  - The page now loads one font (Inter) from Google Fonts, with a system fallback. That's the only outside request.
+  - Current members show Wikipedia's company name ("JPMorgan Chase"); former members keep SEC's name, shown in normal case.
 - **Publishing:** the built site goes on a separate `gh-pages` branch, not `main`. **Nothing is published until Rohan has looked at it locally and says so.**
 
 ---
