@@ -1,0 +1,13 @@
+{
+  "source_repo": "https://github.com/fja05680/sp500",
+  "source_commit": "a2430f2af0c79ddf0748e91de11bdeb1616ab5a7",
+  "historical_file": "S&P 500 Historical Components & Changes (Updated).csv",
+  "historical_file_sha256": "36326709d46d6cd25834de5df457b16f5f96fad3a06b9beac28f7b88aa0b0d54",
+  "current_file_sha256": "e06b473e4679074b2aaa49da67dfc154338b466ca66102935d93486c34e16883",
+  "first_date": "1996-01-02",
+  "data_end_date": "2026-08-18",
+  "snapshot_rows": 2720,
+  "periods": 1262,
+  "unique_tickers": 1209,
+  "built_at": "2026-10-24T21:37:47"
+}
