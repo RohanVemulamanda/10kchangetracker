@@ -36,6 +36,13 @@ class Changes(unittest.TestCase):
         self.assertEqual(edits, [("Rates may rise and hurt our deposits too.", "Rates may rise and hurt our deposits.")])
         self.assertEqual((new, dropped), (["Rates may rise and hurt our loans."], []))
 
+    def test_new_means_nowhere_last_year(self):
+        """A sentence the diff calls "added" that also sits elsewhere in last year's text isn't new."""
+        added = ["We may face new tariffs.", "This sentence was also in last year's section."]
+        prior_keys = {"this sentence was also in last year's section"}
+        new, dropped, edits = split_changes(added, [], prior_keys=prior_keys, current_keys=set())
+        self.assertEqual(new, ["We may face new tariffs."])
+
     def test_word_diff(self):
         self.assertEqual(word_diff("Demand may fall in 2024.", "Demand may fall sharply in 2025."),
                          [["=", "Demand may fall"], ["+", "sharply"], ["=", "in"], ["-", "2024."], ["+", "2025."]])

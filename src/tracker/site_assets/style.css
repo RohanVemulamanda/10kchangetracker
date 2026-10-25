@@ -324,3 +324,11 @@ tbody tr:hover, tbody tr.selected { background: var(--accent-soft); }
   .chart .dot { transform: scale(1); }
   .chart .area { opacity: 1; }
 }
+
+.help { margin-top: 12px; font-size: 0.9rem; }
+.help summary { cursor: pointer; color: var(--accent); font-weight: 600; width: fit-content; }
+.help dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0 0; padding: 14px 16px;
+           border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.help dt { font-weight: 700; }
+.help dd { margin: 0; color: var(--ink-2); }
+@media (max-width: 560px) { .help dl { grid-template-columns: 1fr; } .help dd { margin-bottom: 6px; } }

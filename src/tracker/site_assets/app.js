@@ -146,6 +146,21 @@ function icon(name) {
   return node;
 }
 
+// What each number on a company page means, in plain words (shown on hover and under the tiles).
+const SCORE_HELP = {
+  "Cosine": "How similar the mix of words is, from 0 to 1 (1 = identical). The main measure in the research, and the one behind the rank.",
+  "Jaccard": "The share of distinct words used in both years (1 = exactly the same vocabulary).",
+  "Min edit": "How few word changes turn last year's section into this year's, relative to its length (1 = no changes). Drops sharply when risk factors are reordered.",
+  "Simple": "The share of words that sit in sentences left exactly as they were (1 = nothing rewritten).",
+  "Words": "Length of the Risk Factors section, last year \u2192 this year (risk summary left out).",
+  "Unchanged": "Sentences that appear word for word in both years.",
+};
+
+function updatedOn(iso) {
+  const d = new Date(iso.slice(0, 10) + "T12:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 // ---------------------------------------------------------------- search
 
 const input = document.getElementById("q");
@@ -209,14 +224,15 @@ function renderHome() {
   };
 
   const hero = el("section", { class: "hero" },
-    el("span", { class: "eyebrow" }, el("span", { class: "dot" }), `${s.year} filing season · live`),
+    el("span", { class: "eyebrow" }, el("span", { class: "dot" }), `${s.year} filing season · updated ${updatedOn(m.built)}`),
     el("h1", {}, "Who rewrote their ", el("span", { class: "gradient-text", text: "risk factors" }), "?"),
     el("p", { class: "lede", text: "Every year, S&P 500 companies file a 10-K with a section on what could go wrong. "
-      + "Most copy last year's almost word for word. This tracks the ones that don't, and shows exactly what they changed." }),
+      + "The typical company reuses about three-quarters of last year's sentences word for word. This tracks how much each "
+      + "one rewrote, and shows exactly what changed." }),
     el("div", { class: "kpis" },
       kpi("Companies tracked", m.companies, fmt, "S&P 500 members, 2021 to today"),
       kpi("10-Ks compared", m.filings, fmt, "each against its prior year"),
-      kpi("Typical 10-K keeps", m.research_cosine_median * 100, v => v.toFixed(1) + "%", "of last year's wording (cosine)"),
+      kpi("Typical 10-K keeps", m.research_sentences_kept_median * 100, v => v.toFixed(0) + "%", "of last year's sentences, word for word"),
       kpi(`Filed in ${s.year}`, s.filings, fmt, "so far this season")));
 
   const podium = el("div", { class: "podium" }, ...top3.map((f, i) => {
@@ -255,9 +271,9 @@ function renderHome() {
   reveal(listCard, () => bars.forEach((b, i) => setTimeout(() => b._fill(), i * 45)));
 
   const steps = el("div", { class: "steps" },
-    ...[["compare", "Compared with last year", "Each 10-K's Risk Factors are matched against the same company's previous 10-K, word for word. Summaries and numbers are left out, so “2024” → “2025” isn't a change."],
-        ["rank", "Ranked against everyone", "“Changed more than 90%” means only 10% of S&P 500 10-Ks from fiscal 2021–2025 were rewritten more."],
-        ["read", "Read what changed", "Each company page lists the genuinely new risk language, what was dropped, and the sentences that were edited, with the changed words marked."]]
+    ...[["compare", "Compared with last year", "Each 10-K's Risk Factors section is compared with the same company's previous 10-K. Risk summaries and numbers are left out, so “2024” → “2025” isn't a change."],
+        ["rank", "Ranked against everyone", "The rank is based on how much the mix of words changed (cosine similarity, the main measure in the research). “Changed more than 90%” means only 10% of S&P 500 10-Ks from fiscal 2021–2025 changed more."],
+        ["read", "Read what changed", "Each company page lists the sentences that are new, the ones that were dropped, and the ones that were edited, with the changed words marked."]]
       .map(([ic, h, p], i) => reveal(el("div", { class: "step" }, icon(ic), el("h3", { text: h }), el("p", { text: p })), null, i * 80)));
 
   const page = el("div", { class: "page" },
@@ -356,7 +372,7 @@ function editItems(edits) {
 
 function changesPanel(d) {
   const kinds = [
-    ["new", "New risk language", d.new.length],
+    ["new", "New sentences", d.new.length],
     ["dropped", "Dropped", d.dropped.length],
     ["edited", "Edited", d.edits.count],
   ];
@@ -381,7 +397,7 @@ function changesPanel(d) {
     } else {
       const items = kind === "new" ? d.new : d.dropped;
       body.replaceChildren(items.length ? el("ol", { class: `sentences ${kind}` }, ...sentenceItems(items, kind))
-        : el("div", { class: "empty", text: kind === "new" ? "No genuinely new sentences." : "Nothing was dropped." }));
+        : el("div", { class: "empty", text: kind === "new" ? "No new sentences." : "Nothing was dropped." }));
     }
   }
   const panel = el("div", {}, tabs, body);
@@ -394,8 +410,10 @@ function yearDetail(company, d) {
     ...[["Cosine", d.scores.cosine.toFixed(3)], ["Jaccard", d.scores.jaccard.toFixed(3)],
         ["Min edit", d.scores.min_edit.toFixed(3)], ["Simple", d.scores.simple.toFixed(3)],
         ["Words", `${fmt(d.words[0])} → ${fmt(d.words[1])}`], ["Unchanged", fmt(d.kept)]]
-      .map(([k, v]) => el("div", { class: k === "Words" ? "tile words" : "tile" },
+      .map(([k, v]) => el("div", { class: k === "Words" ? "tile words" : "tile", title: SCORE_HELP[k] },
         el("div", { class: "k", text: k }), el("div", { class: "v", text: v }))));
+  const help = el("details", { class: "help" }, el("summary", { text: "What do these numbers mean?" }),
+    el("dl", {}, ...Object.entries(SCORE_HELP).flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })])));
   const panel = changesPanel(d);
   const card = el("section", { class: "card", id: "year" },
     el("div", { class: "section-head", style: "margin-top:0" },
@@ -410,10 +428,12 @@ function yearDetail(company, d) {
         voiceChip(d.flags),
         d.summary_removed ? el("span", { class: "chip", text: "Risk summary left out" }) : null)),
     tiles,
+    help,
     el("div", { style: "height:18px" }),
     panel,
-    el("p", { class: "note", text: `“New” and “Dropped” have no close match in the other year; a sentence reworded but `
-      + `sharing at least half its words is under “Edited”. ${fmt(d.moved)} sentences only moved and aren't listed.` }));
+    el("p", { class: "note", text: `“New” sentences appear nowhere in last year's section, and “Dropped” ones nowhere in this `
+      + `year's. A sentence reworded but sharing at least half its words is under “Edited”. ${fmt(d.moved)} sentences only `
+      + `moved within the section and aren't listed.` }));
   card._init = () => panel._init();
   return card;
 }

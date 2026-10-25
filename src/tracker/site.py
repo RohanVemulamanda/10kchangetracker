@@ -17,6 +17,7 @@ from __future__ import annotations
 import bisect
 import difflib
 import json
+import statistics
 import shutil
 import sqlite3
 from collections import defaultdict
@@ -24,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .live import load_approved, review_reasons
-from .textprep import words
+from .textprep import split_sentences, words
 from .wordlists import new_and_dropped
 
 ASSETS = Path(__file__).resolve().parent / "site_assets"
@@ -34,7 +35,8 @@ EDIT_OVERLAP = 0.5       # a new and a dropped sentence sharing half their disti
 EDITS_SHOWN = 15         # per filing; the count is always shown, the rest are on EDGAR
 
 
-def split_changes(added: list[str], removed: list[str]) -> tuple[list[str], list[str], list[tuple[str, str]]]:
+def split_changes(added: list[str], removed: list[str], prior_keys: set[str] | None = None,
+                  current_keys: set[str] | None = None) -> tuple[list[str], list[str], list[tuple[str, str]]]:
     """Sort a filing's changed sentences into (genuinely new, genuinely dropped, edited pairs).
 
     Moved sentences are left out first (D-030). Then a new sentence and a dropped one that share
@@ -42,6 +44,13 @@ def split_changes(added: list[str], removed: list[str]) -> tuple[list[str], list
     made best match first, each sentence used once. Edited pairs keep the new sentence's order.
     """
     new, dropped = new_and_dropped(added, removed)
+    # The diff lines sentences up in order, so a sentence that also sits elsewhere in the other year
+    # (repeated, or moved past a repeat) can come out as added or removed. "New" means it appears
+    # nowhere in last year's section; "dropped" means nowhere in this year's.
+    if prior_keys is not None:
+        new = [s for s in new if " ".join(words(s)) not in prior_keys]
+    if current_keys is not None:
+        dropped = [s for s in dropped if " ".join(words(s)) not in current_keys]
     new_words = [set(words(s)) for s in new]
     dropped_words = [set(words(s)) for s in dropped]
     candidates = []
@@ -108,7 +117,7 @@ def shown_filings(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sq
         shown.append({**f, **{m: row[m] for m in MEASURES}, "flags": row["flags"] or "",
                       "prior_fiscal_year": prior_fy, "prior_cik": prior_cik,
                       "prior_words": row["prior_words"], "current_words": row["current_words"],
-                      "sentences_kept": row["sentences_kept"]})
+                      "sentences_kept": row["sentences_kept"] or 0, "sentences_removed": row["sentences_removed"] or 0})
     return shown
 
 
@@ -127,6 +136,19 @@ def build_site(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqlit
     for cik, (_, wiki_name) in current.items():
         sic_description = names.get(cik, (None, None))[1]
         names[cik] = (wiki_name, sic_description)
+    cuts = {r[0]: (r[1], r[2]) for r in cconn.execute(
+        "SELECT accession_number, start_line, end_line FROM risk_summaries WHERE end_line IS NOT NULL")}
+
+    def section_keys(accession: str) -> set[str]:
+        """Every sentence of a section as compared (summary removed), in comparable form."""
+        row = sconn.execute("SELECT scoring_text FROM sections WHERE accession_number = ? AND section = 'item_1a'",
+                            (accession,)).fetchone()
+        lines = (row[0] if row and row[0] else "").split("\n")
+        if accession in cuts:
+            start, end = cuts[accession]
+            lines = lines[:start] + lines[end:]
+        return {" ".join(words(s)) for s in split_sentences("\n".join(lines))}
+
     summaries = {r[0]: r[1] for r in cconn.execute("SELECT accession_number, words_removed FROM risk_summaries "
                                                     "WHERE end_line IS NOT NULL")}
 
@@ -154,7 +176,8 @@ def build_site(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqlit
                                                  "AND kind = 'added' ORDER BY position", (f["accession_number"],))]
             removed = [t for (t,) in cconn.execute("SELECT text FROM changed_sentences WHERE accession_number = ? "
                                                    "AND kind = 'removed' ORDER BY position", (f["accession_number"],))]
-            new, dropped, edits = split_changes(added, removed)
+            new, dropped, edits = split_changes(added, removed, section_keys(f["prior_accession"]),
+                                                section_keys(f["accession_number"]))
             years.append({
                 "accession": f["accession_number"], "fiscal_year": f["fiscal_year"],
                 "prior_fiscal_year": f["prior_fiscal_year"], "filing_date": f["filing_date"],
@@ -195,6 +218,10 @@ def build_site(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqlit
         "companies": len(companies), "filings": len(filings),
         "research_filings": len(research), "live_filings": sum(1 for f in filings if f["role"] == "live"),
         "research_cosine_median": research[len(research) // 2],
+        # The typical share of last year's sentences that reappear word for word (main version)
+        "research_sentences_kept_median": statistics.median(
+            f["sentences_kept"] / (f["sentences_kept"] + f["sentences_removed"])
+            for f in filings if f["role"] == "sample" and f["sentences_kept"] + f["sentences_removed"]),
         "backtest": "pending",
     }
     for name, data in (("companies", companies), ("season", season), ("meta", meta)):

@@ -399,6 +399,19 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
   - Every animation switches off for visitors whose system asks to reduce motion, and both light and dark themes are supported.
   - The page now loads one font (Inter) from Google Fonts, with a system fallback. That's the only outside request.
   - Current members show Wikipedia's company name ("JPMorgan Chase"); former members keep SEC's name, shown in normal case.
+- **Accuracy audit before publishing (2026-10-25, at Rohan's request):**
+  - **Checked and correct:**
+    - all 2,482 research filings are shown, and every score matches the database;
+    - every rank, recomputed independently from the exact scores (0 mismatches);
+    - no live filing still on the review list is shown;
+    - 6 random EDGAR links each open the right form and fiscal year;
+    - 30 random "new" sentences, checked against the original downloaded filings: each is in that year's 10-K and not in the prior year's. (One first looked like a miss; it was only a curly vs straight apostrophe.)
+  - **Fixed:**
+    - **The hero stat said "keeps 99.8% of last year's wording".** That was the cosine median, which common words inflate. It's now the median share of last year's sentences kept word for word: **73.6%**. The intro text was reworded to match.
+    - **The "live" badge** became "updated (date)", since updates are run by hand.
+    - **"New risk language"** became "New sentences": the list includes boilerplate such as introductions.
+    - **451 "new" (0.4%) and 387 "dropped" sentences** actually appeared elsewhere in the other year's section. The diff lines sentences up in order, so repeats and moves can slip through. "New" now means it appears nowhere in last year's section, and "dropped" nowhere in this year's. Re-checked: 0 left.
+  - **Added for usefulness:** a plain-English explanation of each score on every company page ("What do these numbers mean?", also shown on hover), and a line saying the rank is based on cosine, the research's main measure.
 - **Publishing:** the built site goes on a separate `gh-pages` branch, not `main`. **Nothing is published until Rohan has looked at it locally and says so.**
 
 ---
