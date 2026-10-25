@@ -23,6 +23,7 @@ MEASURES = ["sim_cosine", "sim_jaccard", "sim_min_edit", "sim_simple"]
 def load_scores(conn: sqlite3.Connection, cconn: sqlite3.Connection) -> pd.DataFrame:
     """Every row of the changes table, with company name, ticker, fiscal year and filing date."""
     changes = pd.read_sql_query("SELECT * FROM changes", cconn)
+    changes["flags"] = changes["flags"].fillna("")   # empty, not NaN (NaN would count as "true")
     filings = pd.read_sql_query(
         "SELECT f.accession_number, f.company_cik, f.fiscal_year, f.filing_date, f.member_tickers, "
         "f.prior_gap_days, c.name_current AS company FROM filings f LEFT JOIN companies c ON c.cik = f.company_cik "
@@ -52,6 +53,8 @@ def write_phase3_summary(conn: sqlite3.Connection, cconn: sqlite3.Connection, re
     for note, n in main[main.status == "unscored"].note.value_counts().items():
         out.append(f"| Not scored: {note} | {n:,} |")
     out.append(f"| Errors | {(main.status == 'error').sum():,} |")
+    out.append(f"| Flagged `voice_switch` (D-031: switched between \"we\" and \"the Company\"; scored, kept) | "
+               f"{(ok_main['flags'] == 'voice_switch').sum():,} |")
 
     out += ["", "## Spread of each measure", "",
             "Mean, then the 1st, 10th, 25th, 50th, 75th and 90th percentiles.", "",
@@ -88,17 +91,17 @@ def write_phase3_summary(conn: sqlite3.Connection, cconn: sqlite3.Connection, re
     out.append(f"- removed text containing a long paragraph (`long_line`, to check): {int(summaries.long_line.sum()):,}")
 
     out += ["", "## The 15 biggest changes (lowest cosine similarity, main version)", "",
-            "| Company | Fiscal year | Cosine | Jaccard | Min edit | Simple | Words before -> after |",
-            "|---|---|---|---|---|---|---|"]
+            "| Company | Fiscal year | Cosine | Jaccard | Min edit | Simple | Words before -> after | Flag |",
+            "|---|---|---|---|---|---|---|---|"]
     for _, r in ok_main.nsmallest(15, "sim_cosine").iterrows():
         out.append(f"| {r.company} | {r.fiscal_year} | {r.sim_cosine:.3f} | {r.sim_jaccard:.3f} | {r.sim_min_edit:.3f} | "
-                   f"{r.sim_simple:.3f} | {int(r.prior_words):,} -> {int(r.current_words):,} |")
+                   f"{r.sim_simple:.3f} | {int(r.prior_words):,} -> {int(r.current_words):,} | {r['flags'] or ''} |")
 
     text = "\n".join(out) + "\n"
     (reports_dir / "phase3_summary.md").write_text(text, encoding="utf-8")
 
     columns = ["company", "member_tickers", "fiscal_year", "filing_date", "accession_number", "prior_accession",
-               "version", "status", "note", *MEASURES, "prior_words", "current_words", "sentences_added",
+               "version", "status", "note", "flags", *MEASURES, "prior_words", "current_words", "sentences_added",
                "sentences_removed", "sentences_kept", "words_added", "words_removed"]
     df.sort_values(["company", "fiscal_year", "version"])[columns].to_csv(reports_dir / "phase3_scores.csv", index=False)
     summaries.to_csv(reports_dir / "phase3_summaries.csv", index=False)
@@ -206,7 +209,9 @@ def write_score_review_page(conn: sqlite3.Connection, sconn: sqlite3.Connection,
                 f"<p class='meta'>{summary_note(a)}</p>{edges(a)}</div>" for a in (prior, acc))
             parts.append(
                 f"<div class='card' data-id='{rid}' data-name='{esc(name)}'><h2>{esc(name)}</h2>"
-                f"<div class='meta'>cosine {r.sim_cosine:.3f} &middot; Jaccard {r.sim_jaccard:.3f} &middot; "
+                + (f"<div class='meta'><span class='tag warn'>{esc(r['flags'])}</span> the company switched between "
+                   "\"we\" and \"the Company\" (D-031)</div>" if r['flags'] else "")
+                + f"<div class='meta'>cosine {r.sim_cosine:.3f} &middot; Jaccard {r.sim_jaccard:.3f} &middot; "
                 f"min edit {r.sim_min_edit:.3f} &middot; simple {r.sim_simple:.3f} &middot; "
                 f"{int(r.prior_words):,} -> {int(r.current_words):,} words &middot; "
                 f"{int(r.sentences_removed)} sentences removed, {int(r.sentences_added)} added, {int(r.sentences_kept)} kept</div>"

@@ -6,7 +6,7 @@ from pathlib import Path
 import helpers  # noqa: F401
 from tracker import db
 from tracker.extract import connect_sections
-from tracker.score import connect_changes, run_scoring
+from tracker.score import connect_changes, is_voice_switch, run_scoring
 from tracker.score_report import write_phase3_summary, write_score_review_page
 
 BODY = ("Risks Related to Our Business\n"
@@ -119,6 +119,20 @@ class Scoring(unittest.TestCase):
         row = dict(self.cconn.execute("SELECT * FROM risk_summaries WHERE accession_number = 'a21'").fetchone())
         self.assertEqual((row["rule"], row["end_line"]), ("override", 2))
 
+    def test_voice_switch_is_flagged_not_changed(self):
+        """D-031: "We sell..." -> "The Company sells..." is flagged; its scores are still saved."""
+        we = "We depend on our customers. We sell our products to them and they pay us. " * 5
+        company = "The Company depends on its customers. The Company sells its products to them and they pay it. " * 5
+        self.add("v20", 3, 2020, we, role="comparison")
+        self.add("v21", 3, 2021, company, prior="v20")
+        counts = self.run_scoring()
+        self.assertEqual(counts["voice_switches"], 1)
+        row = self.score("v21")
+        self.assertEqual(row["flags"], "voice_switch")
+        self.assertLess(row["sim_cosine"], 1.0)
+        self.assertEqual(self.score("v21", "with_summary")["flags"], "voice_switch")
+        self.assertIsNone(self.score("a22")["flags"])
+
     def test_reports_are_written(self):
         self.run_scoring()
         text = write_phase3_summary(self.conn, self.cconn, self.reports)
@@ -135,6 +149,19 @@ class Scoring(unittest.TestCase):
         self.assertIn("Every pair with a fallback-method extraction (1)", page)
         self.assertIn("removed 19 words", page)                        # the 4-line summary in a21
         self.assertIn("We depend on a few large customers.</div>", page)  # "Ends" skips the blank last line
+
+
+
+class VoiceSwitch(unittest.TestCase):
+    def test_rule(self):
+        we = "we " * 5 + "word " * 95          # 5% first person
+        some = "we " * 2 + "word " * 98        # 2%
+        none = "word " * 100                   # 0%
+        self.assertTrue(is_voice_switch(none, we))
+        self.assertTrue(is_voice_switch(we, none))
+        self.assertFalse(is_voice_switch(we, we))
+        self.assertFalse(is_voice_switch(some, we))   # both years use "we": a shift, not a switch
+        self.assertFalse(is_voice_switch(none, some))  # never reaches 3%
 
 
 if __name__ == "__main__":

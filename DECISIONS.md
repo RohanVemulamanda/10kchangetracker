@@ -277,6 +277,19 @@ Choices made 2026-10-25. Rohan approved the recommended option for each question
 - **How it was checked:** tests with answers worked out by hand on a two-sentence example, identical text (all 1) and unrelated text (all 0). The fast edit-distance code matches the textbook version on 300 random cases. Timing: 0.3–0.6 seconds for a typical pair, 16 seconds for KKR (70,000 words).
 - **Note on the exact formulas:** these follow our understanding of the paper. In particular, how the paper scales minimum edit and simple similarity to 0–1 hasn't been checked against its text yet (open item).
 - **Early warning to check on the full run:** with common words kept, cosine is 0.999 for Apple and Micron FY2024 and 1.000 for KKR, because counts of "the", "and", "of" dominate the vectors. If cosine barely varies across companies, it may hardly separate them, and this choice (D-028) should be revisited.
+- **Result of the full run (2026-10-25):** cosine does sit in a narrow range (1st percentile 0.980, median 0.998), but it ranks filings much like the other measures (rank correlation 0.81 with Jaccard, 0.68 with minimum edit). Phase 4 sorts filings by rank, so the narrow range alone isn't a problem. Kept as is. Its sensitivity to common words does show up in one way, the voice switches in D-031.
+
+### D-031 Companies that switch between "we" and "the Company": flagged, not changed
+- **Found in the full run:** the biggest changes by cosine were mostly companies changing how they refer to themselves, not their risks. BorgWarner switched to "the Company... its" in FY2021 and back to "we... our" in FY2022; Deere, Applied Materials, Dentsply, IDEX, APA and Williams did similar. Every sentence about the company is reworded, so the pair looks heavily changed.
+- **Considered:**
+  - (A) Keep as is: the edits are real, and as far as we know the paper would count them.
+  - (B) Treat all self-references ("we", "our", "the Company", "Deere's"...) as one word: removes the effect, but needs each company's name forms and an ambiguous word like "its", which risks new errors and moves away from the paper.
+  - (C) Keep the scores and flag these pairs.
+- **Chose (C), Rohan's decision.** Scores aren't changed. A `voice_switch` flag in the `changes` table lets Phase 4 run results with and without these pairs. It is the same "flag, don't drop" approach as Phase 2.
+- **Rule:** one year uses first-person words ("we", "our", "us", "ours") for under 1.5% of all words, the other year for 3% or more. In the data there is a clean gap. The 8 switches move from about 0–1.2% to 4–6%. The next-largest shifts (Paramount, Interpublic, Union Pacific, Kimberly-Clark, mostly mergers) stay above 1.5% in both years and aren't flagged; they are real content changes.
+  - A first rough rule ("the share moved by more than 1 point") caught 23 pairs, including those mergers. That's why the rule looks at whether one year almost never uses "we".
+- **Result:** 8 of 2,482 pairs flagged; all 8 are among the 15 biggest changes by cosine. Without them, the top of the list is mergers, spin-offs and rewrites (Paramount 2024, GE Vernova 2025, Union Pacific 2025, Occidental 2025, Kimberly-Clark 2025, Omnicom 2024).
+- **Not caught:** a company renaming itself. JPMorgan Chase became "JPMorganChase" in FY2024, so every sentence with the name counts as changed (cosine 0.931, simple 0.115). It is one filing; noted here rather than handled with another rule.
 
 ---
 

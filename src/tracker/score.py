@@ -24,6 +24,7 @@ from pathlib import Path
 
 from .risk_summary import OverrideNotFound, Summary, remove_summary
 from .similarity import compare
+from .textprep import words
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,16 @@ log = logging.getLogger(__name__)
 SCORER_VERSION = "1.0"
 
 VERSIONS = ("main", "with_summary")
+
+# A "voice switch" (D-031): the company changed how it refers to itself, between "we / our" and
+# "the Company / its / Deere's". Every sentence about the company is reworded, so the pair looks
+# like a big change although the risks are the same. Flagged, not changed: Phase 4 tests results
+# with and without these pairs. One year uses first-person words for under 1.5% of all words,
+# the other for 3% or more (in our data a clean gap: the 8 switches move from about 0-1.2% to
+# 4-6%; the next-largest shifts, mostly mergers, stay above 1.5% in both years).
+FIRST_PERSON = {"we", "our", "us", "ours"}
+VOICE_LOW_SHARE = 0.015
+VOICE_HIGH_SHARE = 0.03
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS changes (
@@ -53,6 +64,7 @@ CREATE TABLE IF NOT EXISTS changes (
     sentences_kept     INTEGER,
     words_added        INTEGER,           -- words in added sentences
     words_removed      INTEGER,           -- words in removed sentences
+    flags              TEXT,              -- 'voice_switch' (D-031); set after every pair is scored
     input_hash         TEXT,              -- fingerprint of the two texts; a change means "score again"
     scorer_version     TEXT,
     scored_at          TEXT,
@@ -88,7 +100,7 @@ CREATE TABLE IF NOT EXISTS risk_summaries (
 CHANGE_COLUMNS = ["accession_number", "section", "version", "prior_accession", "status", "note",
                   "sim_cosine", "sim_jaccard", "sim_min_edit", "sim_simple", "prior_words", "current_words",
                   "prior_sentences", "current_sentences", "sentences_added", "sentences_removed",
-                  "sentences_kept", "words_added", "words_removed", "input_hash", "scorer_version",
+                  "sentences_kept", "words_added", "words_removed", "flags", "input_hash", "scorer_version",
                   "scored_at", "seconds"]
 
 
@@ -97,6 +109,9 @@ def connect_changes(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(changes)")}
+    if "flags" not in columns:  # databases made before the flag existed
+        conn.execute("ALTER TABLE changes ADD COLUMN flags TEXT")
     return conn
 
 
@@ -252,4 +267,31 @@ def run_scoring(conn: sqlite3.Connection, sconn: sqlite3.Connection, cconn: sqli
             elapsed = time.monotonic() - started
             log.info("Progress: %d/%d (%d scored, %d already done), about %.0f min left", i, len(filings),
                      counts["scored"], counts["skipped"], elapsed / i * (len(filings) - i) / 60)
+    counts["voice_switches"] = flag_voice_switches(sconn, cconn, section)
     return counts
+
+
+def first_person_share(text: str) -> float:
+    """Share of all words that are "we", "our", "us" or "ours"."""
+    all_words = words(text)
+    return sum(w in FIRST_PERSON for w in all_words) / len(all_words) if all_words else 0.0
+
+
+def is_voice_switch(prior_text: str, current_text: str) -> bool:
+    shares = sorted((first_person_share(prior_text), first_person_share(current_text)))
+    return shares[0] < VOICE_LOW_SHARE and shares[1] >= VOICE_HIGH_SHARE
+
+
+def flag_voice_switches(sconn: sqlite3.Connection, cconn: sqlite3.Connection, section: str = "item_1a") -> int:
+    """Set the voice_switch flag on every scored pair (both versions). Returns how many were flagged."""
+    texts = dict(sconn.execute("SELECT accession_number, scoring_text FROM sections WHERE section = ?", (section,)).fetchall())
+    flagged = 0
+    pairs = cconn.execute("SELECT accession_number, prior_accession FROM changes WHERE section = ? AND version = 'main' "
+                          "AND status = 'ok'", (section,)).fetchall()
+    for accession, prior in pairs:
+        switch = is_voice_switch(texts[prior], texts[accession])
+        flagged += switch
+        cconn.execute("UPDATE changes SET flags = ? WHERE accession_number = ? AND section = ?",
+                      ("voice_switch" if switch else None, accession, section))
+    cconn.commit()
+    return flagged
