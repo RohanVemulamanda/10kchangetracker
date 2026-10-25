@@ -111,7 +111,7 @@ def download_pending(
     sql = "SELECT * FROM filings WHERE selected = 1 AND (status = 'pending' OR (status = 'failed' AND attempts < ?))"
     params: list = [max_attempts]
     if ciks is not None:
-        sql += f" AND cik IN ({','.join('?' * len(ciks))})"
+        sql += f" AND company_cik IN ({','.join('?' * len(ciks))})"  # includes filings by a company's old IDs
         params += ciks
     todo = [dict(r) for r in conn.execute(sql + " ORDER BY cik, report_date", params).fetchall()]
     log.info("%d filings to download", len(todo))

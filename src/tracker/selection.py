@@ -10,6 +10,10 @@ Rules (each one is in DECISIONS.md):
   D-007  For every sample 10-K, the company's previous 10-K is also kept, as its
          COMPARISON, even if the company wasn't in the index back then. Without it,
          every company's first year in the index could never be scored.
+  D-018  A company that reorganized under a new SEC ID (e.g. a new holding company)
+         is one chain: filings from its old ID are included, each tagged with the ID
+         that filed it ("_cik"). If both IDs filed a 10-K for the same period, the
+         current ID's filing wins.
 """
 from __future__ import annotations
 
@@ -53,8 +57,10 @@ def select_filings(
             originals.append(f)
 
     # Step 2: one 10-K per period. Sort by period end, then filing date, so the
-    # earliest filing for each period comes first and is the one we keep.
-    originals.sort(key=lambda f: (f["reportDate"], f["filingDate"], f["accessionNumber"]))
+    # earliest filing for each period comes first and is the one we keep. In a
+    # reorganized company's chain, the current ID's filing sorts first for its period.
+    originals.sort(key=lambda f: (f["reportDate"], 0 if f.get("_cik", cik) == cik else 1,
+                                  f["filingDate"], f["accessionNumber"]))
     kept: list[dict] = []
     for f in originals:
         if kept and kept[-1]["reportDate"] == f["reportDate"]:
@@ -105,7 +111,8 @@ def select_filings(
 def _row(cik: int, f: dict, fy: int, role: str, members: list[str], prior: dict | None) -> dict:
     return {
         "accession_number": f["accessionNumber"],
-        "cik": cik,
+        "cik": f.get("_cik", cik),   # the ID that actually filed it
+        "company_cik": cik,          # the company (chain) it belongs to
         "form": f["form"],
         "filing_date": f["filingDate"],
         "report_date": f["reportDate"],
@@ -122,7 +129,7 @@ def _row(cik: int, f: dict, fy: int, role: str, members: list[str], prior: dict 
 def _excluded(cik: int, f: dict, reason: str) -> dict:
     return {
         "accession_number": f.get("accessionNumber"),
-        "cik": cik,
+        "cik": f.get("_cik", cik),
         "form": f.get("form"),
         "filing_date": f.get("filingDate"),
         "report_date": f.get("reportDate") or None,

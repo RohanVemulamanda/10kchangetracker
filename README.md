@@ -98,7 +98,10 @@ src/tracker/             the code, one file per job:
   summary.py               the end-of-run report
   pipeline.py              runs the steps in order
 tests/                   unit tests (never contact SEC)
-data/reference/          membership periods, manual ticker fixes (committed)
+data/reference/          membership periods and hand-checked fixes (committed):
+  manual_cik_map.csv       tickers SEC's file can't map, with evidence
+  not_on_edgar.csv         companies whose 10-Ks aren't on EDGAR
+  predecessors.csv         companies that moved to a new SEC ID
 data/raw/                downloaded filings (not committed)
 data/tracker.db          SQLite database (not committed)
 reports/                 summaries and gap lists

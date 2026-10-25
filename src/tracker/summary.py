@@ -96,7 +96,7 @@ def write_summary(conn: sqlite3.Connection, settings: dict, reports_dir: Path, r
     for r in conn.execute("SELECT sec_ticker, cik FROM ticker_map WHERE cik IS NOT NULL"):
         tickers_by_cik[r["cik"]].add(r["sec_ticker"])
     sample_counts = {r["cik"]: r["n"] for r in conn.execute(
-        "SELECT cik, COUNT(*) AS n FROM filings WHERE selected = 1 AND role = 'sample' GROUP BY cik")}
+        "SELECT company_cik AS cik, COUNT(*) AS n FROM filings WHERE selected = 1 AND role = 'sample' GROUP BY company_cik")}
     no_sample = []
     for r in conn.execute("SELECT cik, name_current FROM companies WHERE submissions_status = 'ok'"):
         days = membership.member_days(tickers_by_cik.get(r["cik"], set()), window_start, window_end)
@@ -122,6 +122,19 @@ def write_summary(conn: sqlite3.Connection, settings: dict, reports_dir: Path, r
             sec_name = r["name_current"] or "(filing list not downloaded yet)"
             flag = "  <-- CHECK" if r["mapping_check"] else ""
             add(f"  - {r['sec_ticker']} -> CIK {r['cik']}: ours \"{r['sec_title']}\" | SEC \"{sec_name}\"{flag}")
+    # Old SEC IDs merged into a company's current one (D-018).
+    pred_path = reference_dir / "predecessors.csv"
+    if pred_path.exists():
+        with open(pred_path, newline="", encoding="utf-8") as f:
+            links = [r for r in csv.DictReader(f) if (r.get("successor_cik") or "").strip()]
+        if links:
+            add(f"- Companies that changed SEC ID (old ID's filings included): {len(links)}")
+            for r in links:
+                n = conn.execute(
+                    "SELECT COUNT(*) FROM filings WHERE selected = 1 AND cik = ? AND company_cik = ?",
+                    (int(r["predecessor_cik"]), int(r["successor_cik"]))).fetchone()[0]
+                add(f"  - {r['company_name']}: CIK {r['predecessor_cik']} -> {r['successor_cik']} ({r['event']}); "
+                    f"{n} filings from the old ID")
     notes = conn.execute("SELECT cik, name_current, selection_notes FROM companies WHERE selection_notes IS NOT NULL").fetchall()
     if notes:
         add(f"- Fiscal-year label clashes (both filings kept): {len(notes)}")
@@ -159,7 +172,7 @@ def write_summary(conn: sqlite3.Connection, settings: dict, reports_dir: Path, r
     add("## Download failures")
     failures = conn.execute(
         "SELECT f.accession_number, f.cik, c.name_current, f.fiscal_year, f.error, f.attempts FROM filings f "
-        "LEFT JOIN companies c ON c.cik = f.cik WHERE f.selected = 1 AND f.status = 'failed'").fetchall()
+        "LEFT JOIN companies c ON c.cik = f.company_cik WHERE f.selected = 1 AND f.status = 'failed'").fetchall()
     if failures:
         for error, n in Counter(r["error"] for r in failures).most_common(10):
             add(f"- {error}: {n}")
@@ -175,7 +188,7 @@ def write_summary(conn: sqlite3.Connection, settings: dict, reports_dir: Path, r
     lo, hi = sample["prior_year_min_days"], sample["prior_year_max_days"]
     for r in conn.execute(
         "SELECT f.accession_number, f.cik, c.name_current, f.fiscal_year, f.prior_gap_days, f.member_tickers FROM filings f "
-        "LEFT JOIN companies c ON c.cik = f.cik WHERE f.selected = 1 AND f.role = 'sample' "
+        "LEFT JOIN companies c ON c.cik = f.company_cik WHERE f.selected = 1 AND f.role = 'sample' "
         "AND (f.prior_accession IS NULL OR f.prior_gap_days < ? OR f.prior_gap_days > ?)", (lo, hi)
     ):
         kind = "no_prior_10k" if r["prior_gap_days"] is None else "irregular_prior_gap"

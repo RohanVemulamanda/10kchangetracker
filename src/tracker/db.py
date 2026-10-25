@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS companies (
 
 CREATE TABLE IF NOT EXISTS filings (
     accession_number    TEXT PRIMARY KEY,   -- SEC's unique filing ID, e.g. 0000320193-19-000119
-    cik                 INTEGER NOT NULL,
+    cik                 INTEGER NOT NULL,   -- the SEC ID that filed it (used for download links)
+    company_cik         INTEGER,            -- the company it belongs to today; differs from cik when an
+                                            -- old ID filed it before a reorganization (D-018)
     form                TEXT,
     filing_date         TEXT,
     report_date         TEXT,               -- end of the period the 10-K covers
@@ -89,10 +91,21 @@ CREATE TABLE IF NOT EXISTS excluded_filings (
 """
 
 
+# Columns added after the first release. A database created by an older version of the
+# code gets them added on open, so nobody has to delete their data to upgrade.
+ADDED_COLUMNS = [("filings", "company_cik", "INTEGER")]
+
+
 def connect(db_path: Path) -> sqlite3.Connection:
     """Open the database (creating it and its tables if needed)."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row  # lets us read columns by name: row["cik"]
     conn.executescript(SCHEMA)
+    for table, column, column_type in ADDED_COLUMNS:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+    conn.execute("UPDATE filings SET company_cik = cik WHERE company_cik IS NULL")
+    conn.commit()
     return conn

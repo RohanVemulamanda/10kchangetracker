@@ -3,7 +3,8 @@ import unittest
 from pathlib import Path
 
 from helpers import make_client, ok
-from tracker.ticker_map import SEC_TICKERS_URL, load_manual_map, load_not_on_edgar, load_sec_ticker_map, map_tickers
+from tracker.ticker_map import (SEC_TICKERS_URL, load_manual_map, load_not_on_edgar, load_predecessors,
+                                load_sec_ticker_map, map_tickers)
 
 SEC_MAP = {"AAPL": {"cik": 320193, "title": "Apple Inc."}, "META": {"cik": 1326801, "title": "Meta Platforms"}}
 
@@ -78,9 +79,34 @@ class NotOnEdgar(unittest.TestCase):
                 load_not_on_edgar(path)
 
 
+class Predecessors(unittest.TestCase):
+    def test_reads_links_and_rejects_bad_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "predecessors.csv"
+            header = "successor_cik,predecessor_cik,company_name,event,evidence\n"
+            path.write_text(header + "200,100,Acme,new holding company,8-K12B link\n", encoding="utf-8")
+            self.assertEqual(load_predecessors(path), {200: [100]})
+            path.write_text(header + "200,100,Acme,new holding company,\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_predecessors(path)
+            path.write_text(header + "200,200,Acme,oops,evidence\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_predecessors(path)
+
+
 class ProjectMappingFiles(unittest.TestCase):
     """Checks on the real hand-made files in data/reference/."""
     REF = Path(__file__).resolve().parents[1] / "data" / "reference"
+
+    def test_predecessor_evidence_links_point_to_one_of_the_two_ids(self):
+        import csv
+        import re
+        with open(self.REF / "predecessors.csv", newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                ids = {int(row["successor_cik"]), int(row["predecessor_cik"])}
+                for url_cik in re.findall(r"edgar/data/0*(\d+)/", row["evidence"]):
+                    self.assertIn(int(url_cik), ids, f"{row['company_name']}: link points to an unrelated CIK")
+        self.assertTrue(load_predecessors(self.REF / "predecessors.csv"))
 
     def test_files_load_and_evidence_links_match_the_cik(self):
         import re

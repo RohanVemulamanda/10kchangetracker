@@ -104,6 +104,26 @@ class SampleAndComparison(unittest.TestCase):
         self.assertEqual(len(result.notes), 1)
 
 
+class ReorganizedCompany(unittest.TestCase):
+    """A company that moved under a new SEC ID (like Exxon's 2026 holding company)."""
+
+    def test_old_and_new_ids_form_one_chain(self):
+        new, old = 1234, 99
+        old_filings = [dict(tenk(f"OLD{y}", f"{y + 1}-02-20", f"{y}-12-31"), _cik=old) for y in range(2020, 2024)]
+        new_filings = [dict(tenk(f"NEW{y}", f"{y + 1}-02-25", f"{y}-12-31"), _cik=new) for y in range(2023, 2025)]
+        # In 2024 the old ID also filed its own 10-K for 2023 (as a subsidiary with debt), earlier than the new one.
+        result = select_filings(new, old_filings + new_filings, {"ACME"}, ALWAYS_MEMBER, 2021, 2024, "2019-01-01")
+        rows = {r["accession_number"]: r for r in result.selected}
+
+        self.assertEqual(set(rows), {"OLD2020", "OLD2021", "OLD2022", "NEW2023", "NEW2024"})
+        self.assertEqual(rows["NEW2023"]["prior_accession"], "OLD2022")         # comparison crosses the ID change
+        self.assertEqual((rows["OLD2021"]["cik"], rows["OLD2021"]["company_cik"]), (old, new))
+        self.assertEqual((rows["NEW2023"]["cik"], rows["NEW2023"]["company_cik"]), (new, new))
+        dropped = {e["accession_number"]: e for e in result.excluded}
+        self.assertIn("OLD2023", dropped)                                        # current ID's filing wins
+        self.assertEqual(dropped["OLD2023"]["cik"], old)
+
+
 class MappingCheck(unittest.TestCase):
     PERIODS = [("2015-01-01", "2023-06-01")]
 

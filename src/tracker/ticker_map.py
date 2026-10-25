@@ -111,6 +111,34 @@ def load_not_on_edgar(path: Path) -> dict[str, dict]:
     return entries
 
 
+def load_predecessors(path: Path) -> dict[int, list[int]]:
+    """Read old SEC IDs to merge into a company's current one (D-018).
+
+    Columns: successor_cik, predecessor_cik, company_name, event, evidence.
+    Example: Exxon moved under a new holding company in 2026. SEC's ticker file now
+    points XOM to the new ID, but every Exxon 10-K through fiscal 2025 was filed
+    under the old ID. Listing the old ID here brings those filings back.
+    Returns {current ID: [old IDs]}.
+    """
+    if not path.exists():
+        return {}
+    links: dict[int, list[int]] = {}
+    with open(path, newline="", encoding="utf-8") as f:
+        for line_number, row in enumerate(csv.DictReader(f), start=2):
+            if not (row.get("successor_cik") or "").strip():
+                continue
+            try:
+                successor, predecessor = int(row["successor_cik"]), int(row["predecessor_cik"])
+            except (TypeError, ValueError):
+                raise ValueError(f"{path.name} line {line_number}: CIKs must be numbers")
+            if not (row.get("evidence") or "").strip():
+                raise ValueError(f"{path.name} line {line_number}: missing evidence")
+            if successor == predecessor:
+                raise ValueError(f"{path.name} line {line_number}: a company can't be its own predecessor")
+            links.setdefault(successor, []).append(predecessor)
+    return links
+
+
 def load_wikipedia_ciks(current_list_csv: Path) -> dict[str, int]:
     """Read CIKs from the current S&P list (sp500.csv, scraped from Wikipedia by the source repo)."""
     ciks = {}

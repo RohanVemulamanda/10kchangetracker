@@ -1,0 +1,5 @@
+successor_cik,predecessor_cik,company_name,event,evidence
+2115436,34088,Exxon Mobil,"new Texas holding company, 2026","8-K12B by the new holding company: https://www.sec.gov/Archives/edgar/data/2115436/000119312526291990/d71068d8k12b.htm; FY2025 10-K filed under the old ID: https://www.sec.gov/Archives/edgar/data/34088/000003408826000045/xom-20251231.htm"
+2012383,1364742,BlackRock,"new holding company, 2024","FY2023 10-K filed under the old ID: https://www.sec.gov/Archives/edgar/data/1364742/000095017024019271/blk-20231231.htm; FY2024 10-K filed under the new ID (accession 0000950170-25-026584)"
+1996862,1144519,Bunge,"moved from Bermuda (Bunge Limited) to Switzerland (Bunge Global SA), 2023","FY2022 10-K filed under the old ID (its exhibit 21): https://sec.gov/Archives/edgar/data/1144519/000114451923000010/subsidiarieslistex211123122.htm; FY2023 10-K filed under the new ID (accession 0001996862-24-000007)"
+1841666,6769,APA (Apache),"new holding company APA Corp, 2021","FY2020 10-K filed under the old ID: https://www.sec.gov/Archives/edgar/data/6769/000167337921000007/apa-20201231.htm; FY2021 10-K filed under the new ID (accession 0001784031-22-000009)"

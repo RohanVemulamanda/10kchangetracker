@@ -113,6 +113,43 @@ class EndToEnd(unittest.TestCase):
             step_spot_check(self.conn, how_many=3, seed=7)
         self.assertEqual(printed.getvalue().count("https://www.sec.gov/Archives/edgar/data/"), 3)
 
+    def test_company_that_changed_sec_id(self):
+        # OILCO moved under a new holding company (CIK 50) that hasn't filed a 10-K yet.
+        # Every 10-K so far was filed under the old ID (CIK 40). This is Exxon's situation in 2026.
+        ref = Path(self.settings["paths"]["reference_dir"])
+        ref.mkdir(parents=True, exist_ok=True)
+        (ref / "predecessors.csv").write_text(
+            "successor_cik,predecessor_cik,company_name,event,evidence\n50,40,Oilco,new holding company,8-K12B\n",
+            encoding="utf-8")
+        self.conn.execute("INSERT INTO membership VALUES ('OIL', 'OIL', '2000-01-01', NULL)")
+        self.conn.execute("INSERT INTO ticker_map (sec_ticker, cik, source) VALUES ('OIL', 50, 'sec_current')")
+        self.conn.commit()
+        routes = self.session.routes
+        routes[SUBMISSIONS_URL.format(cik=50)] = ok({"name": "OILCO HOLDINGS", "tickers": ["OIL"],
+                                                     "filings": {"recent": submissions_columns([]), "files": []}})
+        old = []
+        for year in range(2019, 2025):
+            acc = f"{40:010d}-{str(year + 1)[2:]}-000001"
+            old.append(tenk(acc, f"{year + 1}-02-20", f"{year}-12-31"))
+            routes[index_headers_url(40, acc)] = ok(header_for(40, acc, f"{year}-12-31", "OILCO"))
+            routes[document_url(40, acc, "doc.htm")] = ok(BIG_DOC)
+        routes[SUBMISSIONS_URL.format(cik=40)] = ok({"name": "OILCO", "filings": {"recent": submissions_columns(old), "files": []}})
+
+        step_find_filings(self.settings, self.conn, self.client, only_tickers=["OIL"])
+        rows = self.conn.execute("SELECT cik, fiscal_year, role FROM filings WHERE selected = 1 AND company_cik = 50").fetchall()
+        self.assertEqual(sorted((r["fiscal_year"], r["role"], r["cik"]) for r in rows),
+                         [(2020, "comparison", 40), (2021, "sample", 40), (2022, "sample", 40), (2023, "sample", 40)])
+        self.assertIsNone(self.conn.execute("SELECT mapping_check FROM companies WHERE cik = 50").fetchone()[0])
+
+        # A trial run limited to this company must still download the old ID's filings.
+        counts = download_pending(self.conn, self.client, Path(self.settings["paths"]["raw_dir"]), max_attempts=3, ciks=[50])
+        self.assertEqual((counts["downloaded"], counts["failed"]), (4, 0))
+
+        text = write_summary(self.conn, self.settings, self.reports, ref)
+        self.assertIn("Oilco: CIK 40 -> 50", text)
+        self.assertIn("4 filings from the old ID", text)
+        self.assertNotIn("member_but_no_sample_10k", (self.reports / "gaps.csv").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

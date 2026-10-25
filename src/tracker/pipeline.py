@@ -26,7 +26,7 @@ from .log_setup import setup_logging
 from .selection import mapping_problem, select_filings
 from .submissions import fetch_company_filings
 from .summary import write_summary
-from .ticker_map import load_sec_ticker_map, run_ticker_mapping, sample_window_start
+from .ticker_map import load_predecessors, load_sec_ticker_map, run_ticker_mapping, sample_window_start
 from .universe import Membership, build_universe, normalize_ticker, read_data_end_date, source_file_path
 
 log = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ def _ciks_for_run(conn: sqlite3.Connection, only_tickers: list[str] | None) -> t
     return ciks, tickers_by_cik
 
 
-FILING_COLUMNS = ["accession_number", "cik", "form", "filing_date", "report_date", "fiscal_year", "role",
+FILING_COLUMNS = ["accession_number", "cik", "company_cik", "form", "filing_date", "report_date", "fiscal_year", "role",
                   "member_tickers", "prior_accession", "prior_gap_days", "primary_document", "acceptance_api_raw"]
 
 
@@ -126,6 +126,7 @@ def step_find_filings(settings: dict, conn: sqlite3.Connection, client: EdgarCli
     if not membership.periods_by_ticker:
         raise RuntimeError("No membership data. Run `python run.py universe` first.")
     ciks, tickers_by_cik = _ciks_for_run(conn, only_tickers)
+    predecessors = load_predecessors(p["reference_dir"] / "predecessors.csv")
 
     start_fy, end_fy = sample["start_fiscal_year"], sample["end_fiscal_year"]
     earliest_needed = f"{start_fy - 2}-01-01"  # room for the prior-year comparison filings
@@ -144,8 +145,16 @@ def step_find_filings(settings: dict, conn: sqlite3.Connection, client: EdgarCli
     log.info("Finding filings for %d companies (fiscal years %d-%d)", len(ciks), start_fy, end_fy)
     for i, cik in enumerate(ciks, start=1):
         now = datetime.now().isoformat(timespec="seconds")
+        chain = [cik] + predecessors.get(cik, [])  # this company's current SEC ID, then any old ones
         try:
             company, filings = fetch_company_filings(client, cik, p["raw_dir"], earliest_needed, refresh)
+            for f in filings:
+                f["_cik"] = cik
+            for old_cik in chain[1:]:
+                _, old_filings = fetch_company_filings(client, old_cik, p["raw_dir"], earliest_needed, refresh)
+                for f in old_filings:
+                    f["_cik"] = old_cik
+                filings += old_filings
         except DownloadError as exc:
             log.error("Could not get the filing list for CIK %s: %s", cik, exc)
             conn.execute(
@@ -181,15 +190,17 @@ def step_find_filings(settings: dict, conn: sqlite3.Connection, client: EdgarCli
         )
 
         # Re-choose this company's filings from scratch under the current settings.
-        conn.execute("UPDATE filings SET selected = 0 WHERE cik = ?", (cik,))
+        marks = ",".join("?" * len(chain))
+        conn.execute(f"UPDATE filings SET selected = 0 WHERE company_cik = ? OR cik IN ({marks})", [cik, *chain])
         for row in result.selected:
-            existing = conn.execute("SELECT cik FROM filings WHERE accession_number = ?", (row["accession_number"],)).fetchone()
-            if existing and existing["cik"] != cik:
+            existing = conn.execute("SELECT company_cik FROM filings WHERE accession_number = ?",
+                                    (row["accession_number"],)).fetchone()
+            if existing and existing["company_cik"] not in (None, cik):
                 log.warning("Filing %s is listed under CIK %s and CIK %s (combined filing); keeping CIK %s",
-                            row["accession_number"], existing["cik"], cik, cik)
+                            row["accession_number"], existing["company_cik"], cik, cik)
             conn.execute(upsert_sql, row)
             stats[row["role"]] += 1
-        conn.execute("DELETE FROM excluded_filings WHERE cik = ?", (cik,))
+        conn.execute(f"DELETE FROM excluded_filings WHERE cik IN ({marks})", chain)
         conn.executemany(
             "INSERT OR REPLACE INTO excluded_filings (accession_number, cik, form, filing_date, report_date, reason) "
             "VALUES (:accession_number, :cik, :form, :filing_date, :report_date, :reason)",
@@ -212,7 +223,7 @@ def step_spot_check(conn: sqlite3.Connection, how_many: int = 10, seed: int | No
 
     rows = [dict(r) for r in conn.execute(
         "SELECT f.accession_number, f.cik, f.filing_date, f.report_date, f.acceptance_et, f.fiscal_year, "
-        "f.member_tickers, c.name_current FROM filings f LEFT JOIN companies c ON c.cik = f.cik "
+        "f.member_tickers, c.name_current FROM filings f LEFT JOIN companies c ON c.cik = f.company_cik "
         "WHERE f.selected = 1 AND f.role = 'sample' AND f.status = 'downloaded' ORDER BY f.accession_number")]
     if not rows:
         print("No downloaded sample filings yet.")

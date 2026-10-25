@@ -101,6 +101,16 @@ Every choice that could change the results is recorded here: what we chose, what
 - Of the 60: 58 were mapped by hand in `manual_cik_map.csv`. Each row cites a 10-K on sec.gov filed under that CIK, and a unit test checks that every cited link's CIK matches the CIK column. The other 2 are the FDIC filers (D-017).
 - The 58 were acquisitions (Twitter, Xilinx, Activision, ...), renames (FB→META, ANTM→ELV, VIAC→PARA, ...), and companies taken private or merged in 2024–2026 (Hess, Juniper, Discover, Walgreens, ...).
 - After re-running, each hand mapping is checked automatically (D-009: a 10-K filed during membership), and the summary prints SEC's own company name next to ours for a by-eye check.
+- **Result of the re-run:** all 58 passed the automatic check, and the names matched. One name looked odd at first: EQR now shows as "Vivmark Residential". Equity Residential and AvalonBay merged in August 2026 and the combined company took that name under EQR's ID, so the mapping is right.
+
+### D-018 Companies that moved to a new SEC ID
+- **Problem found by the gap report:** SEC's ticker file maps each ticker to the company's *current* SEC ID. When a company reorganizes under a new legal parent, the new parent gets a new ID, and the ticker points there. Every 10-K filed before the change sits under the old ID, so those years were missing.
+  - **Exxon (XOM)** moved under a new Texas holding company in 2026. The new ID has filed no 10-K yet, so *all five* sample years were missing. It was flagged as `suspicious_mapping`.
+  - **BlackRock (BLK, 2024), Bunge (BG, 2023), and APA/Apache (2021)** did the same. They were flagged as `no_prior_10k`, because the new ID's first 10-K had no earlier 10-K under the same ID.
+- **Chose:** List old IDs in `data/reference/predecessors.csv`, with evidence. The pipeline treats the old and new IDs as one company: it includes the old ID's 10-Ks, compares the new ID's first 10-K with the old ID's last one, and keeps the new ID's filing if both filed for the same period. Each filing keeps the ID that actually filed it (needed for download links), plus `company_cik` for the company it belongs to.
+- **Rule for what counts:** only a legal reorganization of the *same business* (a new holding company or a move to another country), where shareholders swap shares 1-for-1 and the 10-K continues. Spin-offs, IPOs, and mergers that create a different company are **not** linked. Their first 10-K has nothing comparable to compare with, so their first year is left unscored.
+- **Could affect results by:** without this, about 10 sample 10-Ks from four large companies would be missing, and the four first-year comparisons would be lost.
+- **Phase 5 note:** live updates must also look up the old ID when a ticker moves to a new one.
 
 ---
 
@@ -114,8 +124,10 @@ Every choice that could change the results is recorded here: what we chose, what
 
 ## Open items before Phase 4
 - [x] Resolve every ticker in `reports/unmapped_tickers.csv` (58 mapped by hand, 2 not on EDGAR)
-- [ ] Re-run and confirm all 58 hand mappings pass the automatic check and the names match
+- [x] Re-run and confirm all 58 hand mappings pass the automatic check and the names match
 - [ ] Confirm by hand that First Republic Bank has no 10-Ks on EDGAR
-- [ ] Review the `suspicious_mapping` rows in `reports/gaps.csv`
+- [x] Review the `suspicious_mapping` rows in `reports/gaps.csv` (Exxon: fixed by D-018)
+- [ ] Re-run with `predecessors.csv` and confirm Exxon, BlackRock, Bunge and APA are complete
+- [ ] Decide how to treat spin-offs and mergers with no prior 10-K (D-018 default: first year unscored)
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)
