@@ -9,8 +9,8 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**.
 | Phase | What | Status |
 |---|---|---|
 | 0 | Project setup | Done |
-| 1 | Download 10-Ks for historical S&P 500 members | **Done**: 2,495 sample + 553 comparison 10-Ks, verified ([report](docs/phase1_report.md)) |
-| 2 | Extract Item 1A (Risk Factors) | Built and tested on 26 real documents; **full run and hand review pending** |
+| 1 | Download 10-Ks for historical S&P 500 members | **Done**: 2,494 sample + 552 comparison 10-Ks, verified ([report](docs/phase1_report.md)) |
+| 2 | Extract Item 1A (Risk Factors) | Version 1.2; full run extracted 2,494 of 2,494 sample filings (v1.1). **Re-run with v1.2 and hand review pending** |
 | 3 | Change scores | Not started |
 | 4 | Backtest | Not started |
 | 5 | Live tool and dashboard | Not started |
@@ -71,6 +71,8 @@ python run.py review-extractions               # writes reports/phase2_review.ht
 
 - Results go to `data/processed/sections.db` (table `sections`), with a display version and a scoring version of each section.
 - `reports/phase2_summary.md` has the success rate; `reports/phase2_flagged.csv` lists every flagged or missing filing with an EDGAR link.
+- `reports/phase2_changes.csv` lists every filing whose result changed since the last extraction version, old and new side by side (D-027).
+- `reports/phase2_length_changes.csv` lists sample filings more than 1.5x longer or shorter than the prior year, for review.
 - `python run.py check-filers` lists sample 10-Ks from companies too small to be S&P 500 members (catches reused tickers, D-025).
 - `python run.py extract --force` redoes everything (after changing the extraction rules, bump `EXTRACTOR_VERSION` in `src/tracker/extract.py` instead).
 
@@ -116,7 +118,7 @@ src/tracker/             the code, one file per job:
   extract.py               Phase 2: run the extraction over all filings
   extract_report.py        Phase 2: summary, flagged list, review page
   pipeline.py              runs the steps in order
-tests/                   unit tests (never contact SEC); tests/fixtures/filings/ holds 6 real 10-Ks (public SEC filings)
+tests/                   unit tests (never contact SEC); tests/fixtures/filings/ holds 9 real 10-Ks (public SEC filings)
 data/reference/          membership periods and hand-checked fixes (committed):
   manual_cik_map.csv       tickers SEC's file can't map, with evidence
   not_on_edgar.csv         companies whose 10-Ks aren't on EDGAR

@@ -1,8 +1,10 @@
 """Phase 2 reports: the extraction summary, a list of flagged cases, and a review page.
 
-  reports/phase2_summary.md    success rate, methods, word counts, flags
-  reports/phase2_flagged.csv   every flagged or not-found filing, with EDGAR links
-  reports/phase2_review.html   20 random extractions to check by hand, plus flagged cases
+  reports/phase2_summary.md          success rate, methods, word counts, flags
+  reports/phase2_flagged.csv         every flagged or not-found filing, with EDGAR links
+  reports/phase2_length_changes.csv  sample filings 1.5x+ longer or shorter than the prior year
+  reports/phase2_changes.csv         filings whose result changed under the newest extractor version
+  reports/phase2_review.html         20 random extractions to check by hand, plus flagged cases
 """
 from __future__ import annotations
 
@@ -15,6 +17,9 @@ import statistics
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+
+from . import extract
+from .extract import REVIEW_LENGTH_RATIO
 
 
 def edgar_document_url(source_document: str) -> str:
@@ -117,9 +122,67 @@ def write_phase2_summary(conn: sqlite3.Connection, sconn: sqlite3.Connection, re
                                  r["accession_number"], r["status"], r.get("flags"), r.get("method"), r.get("words"),
                                  (r.get("notes") or r.get("error") or "")[:300], link])
 
+    n_length = write_length_changes(rows, reports_dir)
+    out.append(f"\n## Year-to-year length changes to review\n- {n_length} sample filings are more than "
+               f"{REVIEW_LENGTH_RATIO}x longer or shorter than the prior year (not flagged). "
+               "They are listed in reports/phase2_length_changes.csv. A real rewrite can do this; so can a "
+               "section that ran too far, which the 3x flag misses (Entergy 2020 was 1.75x).")
+
+    version, n_changed = write_version_changes(conn, sconn, reports_dir)
+    out.append(f"\n## Changes made by extractor version {version}\n- {n_changed} filings have a different result "
+               "than they had before. Each is listed in reports/phase2_changes.csv with the old and new result.")
+
     text = "\n".join(out) + "\n"
     (reports_dir / "phase2_summary.md").write_text(text, encoding="utf-8")
     return text
+
+
+def write_length_changes(rows: list[dict], reports_dir: Path) -> int:
+    """reports/phase2_length_changes.csv: sample filings whose section is over 1.5x longer or
+    shorter than the company's prior-year section, biggest change first. Returns how many."""
+    by_acc = {r["accession_number"]: r for r in rows}
+    pairs = []
+    for r in rows:
+        before = by_acc.get(r.get("prior_accession"))
+        if r["role"] != "sample" or not before or not r.get("words") or not before.get("words"):
+            continue
+        ratio = r["words"] / before["words"]
+        if ratio > REVIEW_LENGTH_RATIO or ratio < 1 / REVIEW_LENGTH_RATIO:
+            pairs.append((max(ratio, 1 / ratio), ratio, before, r))
+    pairs.sort(key=lambda p: -p[0])
+    with open(reports_dir / "phase2_length_changes.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["company", "fiscal_year", "ratio", "prior_words", "words", "prior_method", "method",
+                         "prior_end_text", "end_text", "prior_link", "link"])
+        for _, ratio, before, r in pairs:
+            writer.writerow([r.get("name_current"), r["fiscal_year"], f"{ratio:.2f}", before["words"], r["words"],
+                             before.get("method"), r.get("method"), (before.get("end_text") or "")[:80],
+                             (r.get("end_text") or "")[:80], edgar_document_url(before["source_document"]),
+                             edgar_document_url(r["source_document"])])
+    return len(pairs)
+
+
+def write_version_changes(conn: sqlite3.Connection, sconn: sqlite3.Connection, reports_dir: Path) -> tuple[str, int]:
+    """reports/phase2_changes.csv: every filing whose result changed under the current extractor
+    version, with the old and new result side by side. Returns (version, how many)."""
+    version = extract.EXTRACTOR_VERSION
+    names = {r["accession_number"]: dict(r) for r in conn.execute(
+        "SELECT f.accession_number, f.fiscal_year, f.role, c.name_current FROM filings f "
+        "LEFT JOIN companies c ON c.cik = f.company_cik")}
+    changes = {}
+    for c in sconn.execute("SELECT * FROM section_changes WHERE new_version = ? ORDER BY rowid", (version,)):
+        changes[c["accession_number"]] = dict(c)  # if a filing changed twice under this version, keep the latest
+    with open(reports_dir / "phase2_changes.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["company", "fiscal_year", "role", "accession_number", "old_version", "new_version",
+                         "old_status", "new_status", "old_method", "new_method", "old_words", "new_words",
+                         "old_end_text", "new_end_text"])
+        for acc, c in sorted(changes.items(), key=lambda kv: (names.get(kv[0], {}).get("name_current") or "", kv[0])):
+            n = names.get(acc, {})
+            writer.writerow([n.get("name_current"), n.get("fiscal_year"), n.get("role"), acc, c["old_version"],
+                             c["new_version"], c["old_status"], c["new_status"], c["old_method"], c["new_method"],
+                             c["old_words"], c["new_words"], (c["old_end_text"] or "")[:80], (c["new_end_text"] or "")[:80]])
+    return version, len(changes)
 
 
 # ---------------------------------------------------------------- review page

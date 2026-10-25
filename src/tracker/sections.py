@@ -39,7 +39,18 @@ PAGE_NUMBER = re.compile(r"^(page\s*)?[\-–—]?\s*(\d{1,3}|[ivxlc]{1,7})\s*[\-
 TABLE_OF_CONTENTS = re.compile(r"^(back to |return to )?(the )?table of contents\W*$", re.I)
 REFERENCE_ONLY = re.compile(r"incorporated\s+(herein\s+)?by\s+reference|can be found|is included (in|under)|is contained in", re.I)
 TRAILING_PAGES = re.compile(r"[\s.]*\d{1,3}(\s*[-–—]\s*\d{1,3})?(\s*,\s*\d{1,3}(\s*[-–—]\s*\d{1,3})?)*\s*$")
-LEADING_ITEM = re.compile(r"^(part\s+[ivx]{1,3}\s*[.,:\-–—]?\s*)?(item\s*)?\d{1,2}\.?\s*\(?\s*[a-d]?\s*\)?\s*[.:\-–—]?\s+", re.I)
+# The item number in front of a title, removed by title_of():
+#   - with the word "Item": "Item 1A. ", "ITEM 1.A ", "Part I. Item 1A ", "Item 1A " (no separator needed)
+#   - without it: "1A. ", "7 - " (a separator is needed), or "1A " (number plus letter)
+# A bare number with no separator ("30 Risk Factors") is NOT removed here: in Honeywell's
+# contents that number is a page number. LEADING_PAGE handles those rows (v1.2, D-027).
+# The letter must stand alone ("1A", "1(A)", "1.A"), so the "B" of "Item 1. Business" stays.
+LEADING_ITEM = re.compile(
+    r"^(?:(?:part\s+[ivx]{1,3}\s*[.,:\-–—]?\s*)?item\s*\d{1,2}\.?\s*\(?\s*(?:[a-d]\b)?\s*\)?\s*[.:\-–—]?\s*"
+    r"|\d{1,2}\.?\s*\(?\s*(?:[a-d]\b)?\s*\)?\s*[.:\-–—]\s*"
+    r"|\d{1,2}[a-d]\s+)", re.I)
+# A contents row with its page number first: "30 Risk Factors" (Honeywell 2025).
+LEADING_PAGE = re.compile(r"^\d{1,3}\s+(?=[A-Za-z])")
 
 # Standard 10-K section titles that can end a "heading"-method section. Compared after
 # lower-casing and removing punctuation. "prefix" titles also match longer versions.
@@ -53,7 +64,14 @@ END_TITLES_PREFIX = (
     "market for registrants common equity", "managements discussion and analysis",
     "report of independent registered public accounting firm",
     "changes in and disagreements with accountants",
+    "quantitative and qualitative disclosure",  # also "...Disclosures about Market Risks" (Honeywell 2025)
 )
+# Not item titles, but sections that often follow Risk Factors. Whole-heading match only,
+# so a risk factor that merely mentions executive officers can't end the section.
+END_TITLES_OTHER = {
+    "information about our executive officers", "information about executive officers",
+    "executive officers of the registrant", "executive officers of the company",
+}
 
 MIN_SECTION_WORDS = 300  # anything shorter is a table-of-contents entry or a cross-reference
 
@@ -109,13 +127,27 @@ def is_item_header(text: str) -> tuple[int, str] | None:
     Short blocks starting with "Item ..." count. A long block counts only if the
     title follows right away ("Item 1A. Risk Factors. The following..."), so a
     paragraph that merely starts by mentioning an item doesn't.
+
+    Two kinds of lines look like headers but aren't (v1.2, D-027):
+      - a title in quotation marks after the item number is a cross-reference:
+        'Part II, Item 7 “Management’s Discussion...”' (Colgate 2021, the second half
+        of a sentence split by a page break)
+      - with "Part I" in front, a title must follow: "Part I. Item 1A. Risk Factors"
+        (Expedia) is a header, but the running page header "Part I Item 1A & 1B"
+        (Entergy) is not
     """
-    key = item_key(text)
-    if key is None:
+    m = ITEM_HEADER.match(text)
+    if m is None:
+        return None
+    key = int(m.group(1)), (m.group(2) or "").lower()
+    after = text[m.end():]
+    if re.match(r"^\s*[.,:\-–—]?\s*[“\"‘']", after):
+        return None
+    if text.lower().startswith("part") and not re.match(r"^\s*[.,:\-–—]?\s*[A-Z]", after):
         return None
     if len(text) <= 150:
         return key
-    rest = ITEM_HEADER.sub("", text, count=1).lstrip(" .:-–—")
+    rest = after.lstrip(" .:-–—")
     first_words = rest.split()[:6]
     if first_words and sum(w[:1].isupper() for w in first_words) >= max(2, len(first_words) - 1):
         return key
@@ -146,7 +178,8 @@ def _is_end(title: str, extra_titles: set[str]) -> bool:
 
 
 def is_end_title(block: Block, extra_titles: set[str]) -> bool:
-    if _is_end(title_of(block.text), extra_titles):
+    whole = title_of(block.text)
+    if _is_end(whole, extra_titles) or whole in END_TITLES_OTHER:
         return True
     # run-in end headings: in capitals ("LEGAL PROCEEDINGS. Refer to Note 24...") or in bold
     m = re.match(r"^([A-Z][A-Z ,&’'\-]{3,80})[.:—–]\s", block.text)
@@ -203,23 +236,36 @@ def is_reference_only(blocks: list[Block], found: Found) -> bool:
 
 # ---------------------------------------------------------------- method 2: "Risk Factors" heading
 
+def is_contents_row(block: Block) -> bool:
+    """A table row with the page number first: "30 Risk Factors" (Honeywell 2025)."""
+    return block.table_id is not None and bool(LEADING_PAGE.match(block.text))
+
+
+def contents_title(block: Block) -> str:
+    """The title in a contents line, with the page number removed from either end."""
+    text = LEADING_PAGE.sub("", block.text) if is_contents_row(block) else block.text
+    return title_of(text)
+
+
 def titles_after_in_contents(blocks: list[Block], title: str) -> set[str]:
     """In each table of contents, the title listed right after `title`.
 
-    Contents lines look like "Risk Factors 24" (or "Risk Factors" then "24"). The next
-    line that isn't a page number is the next section, which is where ours ends.
+    Contents lines look like "Risk Factors 24", "Risk Factors" then "24", or, in
+    Honeywell's 2025 10-K, "30 Risk Factors". The next line that isn't a page number is
+    the next section, which is where ours ends.
     """
     found = set()
     for i, b in enumerate(blocks):
-        if title_of(b.text) != title:
+        if contents_title(b) != title:
             continue
-        has_page = bool(TRAILING_PAGES.search(b.text)) or (i + 1 < len(blocks) and PAGE_NUMBER.match(blocks[i + 1].text))
+        has_page = (bool(TRAILING_PAGES.search(b.text)) or is_contents_row(b)
+                    or (i + 1 < len(blocks) and PAGE_NUMBER.match(blocks[i + 1].text)))
         if not has_page:
             continue
         for nxt in blocks[i + 1:i + 6]:
             if PAGE_NUMBER.match(nxt.text):
                 continue
-            t = title_of(nxt.text)
+            t = contents_title(nxt)
             if t and t != title and 1 <= len(t.split()) <= 8:
                 found.add(t)
             break
@@ -242,6 +288,35 @@ def find_end(blocks: list[Block], start: int, stop: int, next_titles: set[str], 
     return stop
 
 
+def names_item(text: str, item: tuple[int, str]) -> bool:
+    """Does this line mention the item anywhere? "Part I Item 1A & 1B" names Item 1A."""
+    number, letter = item
+    letter_part = rf"\.?\s*\(?\s*{letter}\b" if letter else r"\b(?!\s*\(?\s*[a-d]\b)"
+    return bool(re.search(rf"\bitem\s*{number}{letter_part}", text, re.I))
+
+
+def cut_at_item_pages(blocks: list[Block], found: Found, furniture: set[str], spec: SectionSpec = ITEM_1A) -> bool:
+    """Stop at the end of the last page whose running header names the item.
+
+    Entergy's 2020 10-K has no "Item 1A" or "Item 1B" header, only "RISK FACTORS", and
+    what follows is a subsidiary's "Management's Financial Discussion and Analysis",
+    whose title is also a running header (so it can't end the section). But every
+    risk-factor page is headed "Part I Item 1A & 1B". So the section ends at the first
+    page break after the last page with that header. Needs 2+ copies of such a header
+    inside the section. Only shortens a section, never lengthens one. Returns True if cut.
+    """
+    marked = [j for j in range(found.start + 1, found.end)
+              if masked(blocks[j].text) in furniture and names_item(blocks[j].text, spec.item)]
+    if len(marked) < 2:
+        return False
+    for j in range(marked[-1] + 1, found.end):
+        if blocks[j].page_break_before or PAGE_NUMBER.match(blocks[j].text):
+            found.end = j
+            found.end_text = f"(end of the last page headed “{blocks[marked[-1]].text[:60]}”)"
+            return True
+    return False
+
+
 def find_by_heading(blocks: list[Block], spec: SectionSpec = ITEM_1A, furniture: set[str] | None = None) -> Found | None:
     furniture = page_furniture(blocks) if furniture is None else furniture
     next_titles = titles_after_in_contents(blocks, spec.title)
@@ -250,12 +325,13 @@ def find_by_heading(blocks: list[Block], spec: SectionSpec = ITEM_1A, furniture:
         offset = heading_match(b, spec.title)
         if offset is None:
             continue
-        if b.table_id is not None and re.search(r"\d\s*$", b.text):
-            continue  # a contents line ("Risk Factors 56"), not the heading itself (Eastman's MD&A contents)
+        if b.table_id is not None and (re.search(r"\d\s*$", b.text) or is_contents_row(b)):
+            continue  # a contents line ("Risk Factors 56", "30 Risk Factors"), not the heading itself
         end = find_end(blocks, i, len(blocks), next_titles, furniture, spec)
         found = Found("heading", i, end, offset, b.text[:200],
                       blocks[end].text[:200] if end < len(blocks) else "(end of document)")
-        found.words = content_words(blocks, i, end, offset)
+        cut_at_item_pages(blocks, found, furniture, spec)
+        found.words = content_words(blocks, i, found.end, offset)
         if best is None or found.words > best.words:
             best = found
     if best is not None and next_titles:

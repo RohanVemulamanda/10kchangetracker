@@ -87,12 +87,37 @@ class Pipeline(unittest.TestCase):
         self.assertIn("- heading_exhibit13: 1", summary)
         flagged_csv = (self.reports / "phase2_flagged.csv").read_text(encoding="utf-8")
         self.assertEqual(flagged_csv.count("\n"), 4)  # header + A-23, C-22, D-22
+        # A-23 is 4x A-22: also on the 1.5x review list. A-22 vs A-21 (1.03x) is not.
+        self.assertIn("- 1 sample filings are more than 1.5x longer or shorter", summary)
+        lengths = (self.reports / "phase2_length_changes.csv").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lengths), 2)
+        self.assertTrue(lengths[1].startswith("ACME CORP,2023,3.88,"))
+        # Redoing everything with version 9.9 gave the same results, so nothing is logged as changed.
+        self.assertEqual(self.sconn.execute("SELECT COUNT(*) FROM section_changes").fetchone()[0], 0)
 
         path, seed = write_review_page(self.conn, self.sconn, self.reports, how_many=3, seed=11)
         page = path.read_text(encoding="utf-8")
         self.assertEqual(len(re.findall(r"class='card' data-id=", page)), 3)
         self.assertIn("--seed 11", page)
         self.assertIn("https://www.sec.gov/Archives/edgar/data/", page)
+
+    def test_changes_between_versions_are_logged(self):
+        self.add("A-22", 1, 2022, {"a22.htm": tenk_html(3000)})
+        self.add("C-22", 3, 2022, {"c22.htm": tenk_html(2000)})
+        run_extraction(self.conn, self.sconn, self.raw)
+        # Pretend a rule change makes A-22's section shorter, then run as a new version.
+        (self.raw / "filings/1/A22/a22.htm.gz").write_bytes(gzip.compress(tenk_html(1500)))
+        with mock.patch.object(extract, "EXTRACTOR_VERSION", "9.9"):
+            counts = run_extraction(self.conn, self.sconn, self.raw)
+            self.assertEqual((counts["attempted"], counts["changed"]), (2, 1))
+            summary = write_phase2_summary(self.conn, self.sconn, self.reports)
+        change = dict(self.sconn.execute("SELECT * FROM section_changes").fetchone())
+        self.assertEqual((change["accession_number"], change["new_version"]), ("A-22", "9.9"))
+        self.assertGreater(change["old_words"], change["new_words"])
+        self.assertIn("## Changes made by extractor version 9.9\n- 1 filings have a different result", summary)
+        rows = (self.reports / "phase2_changes.csv").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(rows), 2)
+        self.assertIn("A-22", rows[1])
 
     def test_broken_file_is_recorded_and_the_run_continues(self):
         self.add("A-22", 1, 2022, {"a22.htm": tenk_html(3000)})

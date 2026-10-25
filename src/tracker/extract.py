@@ -31,13 +31,17 @@ from .sections import (ITEM_1A, MIN_SECTION_WORDS, PAGE_RANGE, SectionSpec, cut_
 log = logging.getLogger(__name__)
 
 # Bump this whenever the extraction rules change. Rows made by an older version get redone.
-EXTRACTOR_VERSION = "1.1"   # 1.1: "Item 1.A.", "Part I. Item 1A.", bold run-in headings, page headers
+EXTRACTOR_VERSION = "1.2"   # 1.1: "Item 1.A.", "Part I. Item 1A.", bold run-in headings, page headers
                             #      can't end a section, headed parts, page-range stop (D-026)
+                            # 1.2: quoted cross-references and "Part I Item 1A & 1B" page headers aren't
+                            #      headers, contents rows with page numbers first, last page headed
+                            #      "Item 1A" ends a heading section (D-027)
 
 # Quality-check thresholds (D-021)
 MIN_WORDS_OK = 1_000
 MAX_WORDS_OK = 50_000
-MAX_LENGTH_RATIO = 3.0   # vs the same company's prior-year extraction
+MAX_LENGTH_RATIO = 3.0     # vs the same company's prior-year extraction: flagged
+REVIEW_LENGTH_RATIO = 1.5  # listed for review in reports/phase2_length_changes.csv, not flagged (D-027)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sections (
@@ -60,6 +64,25 @@ CREATE TABLE IF NOT EXISTS sections (
     seconds           REAL,
     error             TEXT,
     PRIMARY KEY (accession_number, section)
+);
+
+-- One row each time a filing's result changes when it's extracted again (usually by a
+-- new extractor version). This is how we check that a fix didn't break anything else:
+-- reports/phase2_changes.csv lists every change made by the current version.
+CREATE TABLE IF NOT EXISTS section_changes (
+    accession_number  TEXT NOT NULL,
+    section           TEXT NOT NULL,
+    old_version       TEXT,
+    new_version       TEXT,
+    old_status        TEXT,
+    new_status        TEXT,
+    old_method        TEXT,
+    new_method        TEXT,
+    old_words         INTEGER,
+    new_words         INTEGER,
+    old_end_text      TEXT,
+    new_end_text      TEXT,
+    changed_at        TEXT
 );
 """
 
@@ -184,10 +207,30 @@ ROW_COLUMNS = ["accession_number", "section", "status", "method", "source_docume
                "extractor_version", "extracted_at", "seconds", "error"]
 
 
-def save_row(sconn: sqlite3.Connection, row: dict) -> None:
+def was_found(status: str | None) -> bool:
+    """"ok" and "flagged" both mean the section was found. (The change log treats them the same:
+    the length-jump flag is added after every filing is saved, so a fresh row is always "ok".)"""
+    return status in ("ok", "flagged")
+
+
+def save_row(sconn: sqlite3.Connection, row: dict) -> bool:
+    """Save a result. If it replaces a different earlier result, log the change. Returns True if changed."""
+    old = sconn.execute("SELECT status, method, words, end_text, scoring_text, extractor_version FROM sections "
+                        "WHERE accession_number = ? AND section = ?", (row["accession_number"], row["section"])).fetchone()
+    changed = old is not None and (was_found(old["status"]) != was_found(row.get("status"))
+                                   or any(old[c] != row.get(c) for c in ("method", "end_text", "scoring_text")))
+    if changed:
+        sconn.execute(
+            "INSERT INTO section_changes (accession_number, section, old_version, new_version, old_status, new_status, "
+            "old_method, new_method, old_words, new_words, old_end_text, new_end_text, changed_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (row["accession_number"], row["section"], old["extractor_version"], row.get("extractor_version"),
+             old["status"], row.get("status"), old["method"], row.get("method"), old["words"], row.get("words"),
+             old["end_text"], row.get("end_text"), datetime.now().isoformat(timespec="seconds")))
     values = {c: row.get(c) for c in ROW_COLUMNS}
     sconn.execute(f"INSERT OR REPLACE INTO sections ({', '.join(ROW_COLUMNS)}) "
                   f"VALUES ({', '.join(':' + c for c in ROW_COLUMNS)})", values)
+    return changed
 
 
 def flag_length_jumps(conn: sqlite3.Connection, sconn: sqlite3.Connection, spec: SectionSpec = ITEM_1A) -> int:
@@ -236,7 +279,7 @@ def run_extraction(conn: sqlite3.Connection, sconn: sqlite3.Connection, raw_dir:
     log.info("%d downloaded filings; %d to extract (%s)", len(filings), len(todo),
              "all, --force" if force else f"{len(filings) - len(todo)} already done with version {EXTRACTOR_VERSION}")
 
-    counts = {"attempted": len(todo), "ok": 0, "flagged": 0, "not_found": 0, "error": 0}
+    counts = {"attempted": len(todo), "ok": 0, "flagged": 0, "not_found": 0, "error": 0, "changed": 0}
     started = time.monotonic()
     for i, filing in enumerate(todo, start=1):
         try:
@@ -246,7 +289,7 @@ def run_extraction(conn: sqlite3.Connection, sconn: sqlite3.Connection, raw_dir:
             row = {"accession_number": filing["accession_number"], "section": spec.name, "status": "error",
                    "error": repr(exc)[:500], "extractor_version": EXTRACTOR_VERSION,
                    "extracted_at": datetime.now().isoformat(timespec="seconds")}
-        save_row(sconn, row)
+        counts["changed"] += save_row(sconn, row)
         sconn.commit()
         counts[row["status"]] += 1
         if row["status"] == "not_found":

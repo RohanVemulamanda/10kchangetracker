@@ -79,6 +79,32 @@ class RealFilings(unittest.TestCase):
                    "The following discussion presents what management currently believes could be the material risks",
                    "management time and attention and other resources.", "SUSTAINABILITY")
 
+    # Version 1.2 cases (D-027)
+
+    def test_honeywell_contents_with_page_numbers_first(self):
+        # Contents rows read "30 Risk Factors", "40 Quantitative and Qualitative Disclosures about Market Risks".
+        self.check(run("773840/000077384026000013/hon-20251231.htm.gz"), "heading", 8441,
+                   "Our business, operating results, cash flows, and financial condition are subject to the material risks",
+                   "results of operations, cash flows, liquidity, and financial condition.",
+                   "QUANTITATIVE AND QUALITATIVE DISCLOSURES ABOUT MARKET RISKS",
+                   not_in=["LIQUIDITY AND CAPITAL RESOURCES", "INFORMATION ABOUT OUR EXECUTIVE OFFICERS"])
+
+    def test_colgate_cross_reference_after_page_break_is_not_a_header(self):
+        # Page 11 ends mid-sentence; page 12 starts: Part II, Item 7 "Management's Discussion...".
+        row = run("21665/000002166522000003/cl-20211231.htm.gz")
+        self.check(row, "item", 7978,
+                   "In addition to the risks described elsewhere in this report, set forth below is a summary",
+                   "could adversely impact our business, results of operations, cash flows and financial condition.",
+                   "ITEM 1B. UNRESOLVED STAFF COMMENTS")
+        self.assertIn('Part II, Item 7 "Management\'s Discussion', row["scoring_text"])
+
+    def test_entergy_ends_at_last_page_headed_item_1a(self):
+        # No "Item 1A" or "Item 1B" header; every risk-factor page is headed "Part I Item 1A & 1B".
+        self.check(run("65984/000006598421000096/etr-20201231.htm.gz"), "heading", 16647,
+                   'See "RISK FACTOR SUMMARY" in Part I Item 1 for a summary of Entergy\'s',
+                   "subject to prior payment of distributions on its preferred securities.",
+                   "(end of the last page headed", not_in=["Part I Item 1A & 1B", "MANAGEMENT'S FINANCIAL DISCUSSION"])
+
     def test_display_version_keeps_original_punctuation(self):
         row = run("320193/000032019325000079/aapl-20250927.htm.gz")
         first = json.loads(row["display_json"])[0]["t"]

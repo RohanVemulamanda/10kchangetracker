@@ -191,6 +191,32 @@ The first run (v1.0) extracted 99% of sample filings. The 39 flagged or missing 
 
 **Reviewed by hand and kept as is:** the `long` flags (over 50,000 words) for KKR (68,000–71,000), Ares (52,000–54,000) and Moderna 2020 (54,000). Each runs from the Item 1A header to the Item 1B header, ends on the company's real last risk factor, and has a steady length year to year. These firms really do write very long risk sections. The flag stays, so it remains visible.
 
+### D-027 Extraction version 1.2: two v1.1 regressions, one older error, and a change log
+The v1.1 run extracted every sample filing (2,494 of 2,494). Checking it turned up four problems.
+
+**Two cases v1.1 broke** (both from the "Part I. Item 1A." rule added for Expedia):
+- **Colgate 2021 stopped too early (2,702 words instead of 7,978).** A sentence split by a page break left a line starting *Part II, Item 7 "Management's Discussion..."*, which was read as the Item 7 header. Fix: a title in quotation marks after the item number means a cross-reference, not a header.
+- **Entergy 2020 grabbed too much (70,938 words).** Its running page header "Part I Item 1A & 1B" was read as a start. Fix: with "Part I" in front, a header must be followed by a title ("Part I. Item 1A. Risk Factors" still counts).
+
+**One error that v1.0 had too, which no check caught:** Entergy 2020 has no "Item 1A" or "Item 1B" header, only "RISK FACTORS". The section ran on into a subsidiary's financial discussion (26,680 words in v1.0). That was only 1.75x its 2021 length, under the 3x flag. Fix: every risk-factor page is headed "Part I Item 1A & 1B", so a heading-method section now stops at the end of the last page whose running header names Item 1A (needs 2+ such headers; it can only shorten a section). Result: 16,647 words, and the first and last paragraphs match 2021's exactly.
+
+**Honeywell 2025 grabbed too much (14,427 words instead of 8,441).** It ran past the risk factors into liquidity, accounting estimates and the executive officers list. There were two causes:
+- Its contents rows put the page number first ("30 Risk Factors"), so the "next title in the contents" rule found nothing. Contents rows like that are now read.
+- The next header says "...About Market **Risks**" (plural). "Quantitative and qualitative disclosure..." now matches any ending.
+
+"Information About Our Executive Officers" (and similar) also ends a heading-method section now, but only as a whole heading.
+
+A small cleanup: a bare number in front of a title is no longer removed unless a separator follows ("7. Management's..."), as in v1.0. v1.1 had removed any 1–2 digit number, which made "30 Risk Factors" look like a heading.
+
+**Two new safeguards:**
+- **Change log.** When a filing is extracted again and its result differs, the old and new results are saved to the `section_changes` table, and `reports/phase2_changes.csv` lists every change made by the current version. The v1.1 regressions were found by luck, in the flagged list. From now on every change is listed and can be checked.
+- **Length review list.** `reports/phase2_length_changes.csv` lists sample filings that are more than 1.5x longer or shorter than the prior year. They're not flagged, since real rewrites do this (for example, the 2020 rule that added risk-factor summaries). But it's where an overrun like Entergy 2020's would show up.
+
+**Regression check before release:** 69 local real filings were re-extracted.
+- 57 (the samples, flagged and fallback sets) were compared with v1.1. Only Honeywell 2025 changed, as intended.
+- All 12 Entergy and Colgate filings were compared with v1.0. Eleven match exactly. Entergy 2020 changed, as intended.
+- Three of these filings were added to the real-filing tests (Honeywell 2025, Colgate 2021, Entergy 2020).
+
 ---
 
 ## Known limitations (to disclose)
@@ -209,7 +235,9 @@ The first run (v1.0) extracted 99% of sample filings. The 39 flagged or missing 
 - [x] Re-run with `predecessors.csv` and confirm Exxon, BlackRock, Bunge and APA are complete (+8 sample, +4 comparison filings, as predicted)
 - [x] Decide how to treat spin-offs and mergers with no prior 10-K: first year left unscored (D-019)
 - [x] PARA fix re-run (sample 2,495 -> 2,494: Banzai's 4 years out, Paramount's 3 in) and filer-size check reviewed
-- [ ] Phase 2: re-run with extraction v1.1
+- [x] Phase 2: re-run with extraction v1.1 (2,494 of 2,494 sample filings extracted; problems fixed in v1.2, D-027)
+- [ ] Phase 2: re-run with extraction v1.2 and review every change in `reports/phase2_changes.csv`
+- [ ] Phase 2: review `reports/phase2_length_changes.csv` (year-to-year changes over 1.5x)
 - [ ] Phase 2: hand-review 20 random extractions and every remaining flagged case
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)
