@@ -7,6 +7,8 @@
   download      download the chosen filings (resumes where it left off)
   summary       write reports/phase1_summary.md
   spot-check    print 10 random downloaded filings with EDGAR links, to check by hand
+  extract              Phase 2: extract Item 1A (Risk Factors) from every downloaded 10-K
+  review-extractions   Phase 2: write a page of 20 random extractions to check by hand
   all           universe -> map-tickers -> find-filings -> download -> summary
 """
 from __future__ import annotations
@@ -21,6 +23,8 @@ from . import db
 from .config import ConfigError, get_user_agent, load_settings, project_path
 from .downloader import download_pending
 from .edgar_client import DownloadError, EdgarClient, SecAccessDenied
+from .extract import connect_sections, run_extraction
+from .extract_report import write_phase2_summary, write_review_page
 from .header import api_minus_header_minutes, index_headers_url, parse_index_headers
 from .log_setup import setup_logging
 from .selection import mapping_problem, select_filings
@@ -240,7 +244,30 @@ def step_spot_check(conn: sqlite3.Connection, how_many: int = 10, seed: int | No
 
 # ------------------------------------------------------------------ run a command
 
-def run(command: str, tickers: list[str] | None = None, seed: int | None = None) -> int:
+def step_extract(settings: dict, conn: sqlite3.Connection, tickers: list[str] | None, force: bool) -> None:
+    """Phase 2: extract Item 1A from every downloaded filing, then write the summary."""
+    p = paths(settings)
+    sconn = connect_sections(p["sections_db"])
+    try:
+        ciks = _ciks_for_run(conn, tickers)[0] if tickers else None
+        counts = run_extraction(conn, sconn, p["raw_dir"], ciks, force)
+        log.info("Extraction done: %s", json.dumps(counts))
+        print("\n" + write_phase2_summary(conn, sconn, p["reports_dir"]))
+    finally:
+        sconn.close()
+
+
+def step_review(settings: dict, conn: sqlite3.Connection, seed: int | None) -> None:
+    p = paths(settings)
+    sconn = connect_sections(p["sections_db"])
+    try:
+        path, used_seed = write_review_page(conn, sconn, p["reports_dir"], seed=seed)
+        print(f"Review page written (seed {used_seed}). Open it in your browser:\n  {path}")
+    finally:
+        sconn.close()
+
+
+def run(command: str, tickers: list[str] | None = None, seed: int | None = None, force: bool = False) -> int:
     settings = load_settings()
     p = paths(settings)
     log_path = setup_logging(command.replace("-", "_"), p["logs_dir"])
@@ -254,6 +281,12 @@ def run(command: str, tickers: list[str] | None = None, seed: int | None = None)
             return 0 if step_check(settings, client) else 1
         if command == "spot-check":
             step_spot_check(conn, seed=seed)
+            return 0
+        if command == "extract":
+            step_extract(settings, conn, tickers, force)
+            return 0
+        if command == "review-extractions":
+            step_review(settings, conn, seed)
             return 0
 
         if command in {"universe", "all"}:

@@ -5,5 +5,6 @@ requests>=2.31,<3        # downloading from SEC EDGAR
 pandas>=2.1              # tables and CSV reports
 PyYAML>=6.0              # reading config/settings.yaml
 python-dotenv>=1.0       # reading your name/email from .env
+lxml>=4.9                # reading 10-K HTML (Phase 2)
 pytest>=8.0              # running the tests (tests also run with plain `python -m unittest`)
 tzdata>=2024.1; sys_platform == "win32"   # time-zone data; Windows doesn't ship it

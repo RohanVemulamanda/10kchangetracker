@@ -6,6 +6,7 @@
 
 paths:
   db: data/tracker.db                 # SQLite database: filing list + download status
+  sections_db: data/processed/sections.db   # extracted Risk Factors text (Phase 2)
   raw_dir: data/raw                   # cached SEC downloads (gzip-compressed)
   reference_dir: data/reference       # S&P membership, manual ticker fixes
   reports_dir: reports                # summary reports (small, committed to git)

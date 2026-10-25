@@ -10,7 +10,7 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**.
 |---|---|---|
 | 0 | Project setup | Done |
 | 1 | Download 10-Ks for historical S&P 500 members | **Done**: 2,495 sample + 553 comparison 10-Ks, verified ([report](docs/phase1_report.md)) |
-| 2 | Extract Item 1A (Risk Factors) | Not started |
+| 2 | Extract Item 1A (Risk Factors) | Built and tested on 26 real documents; **full run and hand review pending** |
 | 3 | Change scores | Not started |
 | 4 | Backtest | Not started |
 | 5 | Live tool and dashboard | Not started |
@@ -60,6 +60,19 @@ python run.py all                            # 3. full run (estimate: 30-60 minu
 
 In the trial run, META will show `FB` as an unmapped ticker. That's expected: it shows the old-ticker problem described in DECISIONS.md D-009.
 
+## Running Phase 2 (Risk Factors extraction)
+
+```bash
+pip install -r requirements.txt       # adds lxml
+python run.py extract --tickers AAPL,JPM,WFC   # trial on three companies (seconds)
+python run.py extract                          # all filings (estimate: 15-30 minutes); safe to stop and restart
+python run.py review-extractions               # writes reports/phase2_review.html: 20 random extractions to check
+```
+
+- Results go to `data/processed/sections.db` (table `sections`), with a display version and a scoring version of each section.
+- `reports/phase2_summary.md` has the success rate; `reports/phase2_flagged.csv` lists every flagged or missing filing with an EDGAR link.
+- `python run.py extract --force` redoes everything (after changing the extraction rules, bump `EXTRACTOR_VERSION` in `src/tracker/extract.py` instead).
+
 ## Checking Phase 1 is correct
 
 1. **Hand-check 10 random filings.** Run `python run.py spot-check`. It prints 10 random downloaded filings with what we stored, plus a link to each one's EDGAR page. Open each link and compare the filing date, "Accepted" time, and "Period of Report" with our values.
@@ -96,8 +109,12 @@ src/tracker/             the code, one file per job:
   header.py                acceptance time and document list from each filing's header
   downloader.py            downloads with resume
   summary.py               the end-of-run report
+  html_text.py             Phase 2: 10-K HTML -> paragraphs
+  sections.py              Phase 2: find and clean Item 1A
+  extract.py               Phase 2: run the extraction over all filings
+  extract_report.py        Phase 2: summary, flagged list, review page
   pipeline.py              runs the steps in order
-tests/                   unit tests (never contact SEC)
+tests/                   unit tests (never contact SEC); tests/fixtures/filings/ holds 6 real 10-Ks (public SEC filings)
 data/reference/          membership periods and hand-checked fixes (committed):
   manual_cik_map.csv       tickers SEC's file can't map, with evidence
   not_on_edgar.csv         companies whose 10-Ks aren't on EDGAR

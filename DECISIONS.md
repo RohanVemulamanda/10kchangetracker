@@ -72,7 +72,8 @@ Every choice that could change the results is recorded here: what we chose, what
 
 ### D-012 Storage: SQLite plus compressed files
 - **Chose:** One SQLite database (`data/tracker.db`) for filing details and download status. The raw files are saved gzip-compressed under `data/raw/`.
-- **Why:** SQLite is good at tracking "what's done and what's left," which is how a stopped run resumes. Large HTML files don't belong inside a database. Parquet will be used for extracted text in Phase 2.
+- **Why:** SQLite is good at tracking "what's done and what's left," which is how a stopped run resumes. Large HTML files don't belong inside a database.
+- **Update (Phase 2):** the plan was Parquet for extracted text. We used a second SQLite file, `data/processed/sections.db`, instead: the same format as the rest of the project, simple resuming per filing, and it can be tested without extra libraries. Text can be exported to Parquet later if Phase 3 needs it.
 
 ### D-013 Our own downloader instead of a library
 - **Chose:** A downloader written with `requests` (about 170 lines).
@@ -120,6 +121,47 @@ Every choice that could change the results is recorded here: what we chose, what
 
 ---
 
+## Phase 2: extracting Item 1A (Risk Factors)
+
+Designed against 26 real documents from the downloads (20 random filings plus JPMorgan, Wells Fargo, Citigroup, GE and Apple), and checked on all of them: 25 of 25 filings extracted, with the start and end confirmed by printing the text around each boundary.
+
+### D-020 How the section is found
+- **Text first:** each 10-K's HTML is turned into blocks, one per paragraph or table row. Text inside a paragraph is joined even when split across formatting tags. Without this, Dominion's header reads "Item 1A. Ris" / "k Factors" and is missed. Hidden content (`display:none`) is removed; in 10-Ks it is only XBRL tagging data and empty spacer cells.
+- **Method 1, `item` (standard layout):** every block that starts with an Item 1A header is a candidate ("ITEM 1A.", "Item 1A:", "Item 1(A)", "Item 1 (A) -"). Each candidate's section runs to the next header with a later item number (1B, 1C, 2, ...) or "PART II". We keep the candidate with the most words, which skips the table-of-contents entry. Item 1C (Cybersecurity, required since late 2023) is handled like any later item. "Part I" doesn't end the section, because some 10-Ks (JPMorgan) print it as a running header on every page.
+- **If Item 1A only points elsewhere** ("...can be found in the Annual Report..."), we look in the EX-13 exhibit (Wells Fargo).
+- **Method 2, `heading` (annual-report layout, the fallback chosen as option A):** a block that is the heading "Risk Factors", or starts with it in capitals ("RISK FACTORS. The following..." in GE). The section ends at whichever comes first: the next title after "Risk Factors" in the document's own table of contents (Citigroup: "Sustainability"), or a standard 10-K section title ("Legal Proceedings", "Controls and Procedures", ...).
+- **Order:** item in the main document, then EX-13 if the main document refers there, then heading in the main document, then the EX-13 methods. The first that finds 300+ words wins.
+- **Recorded:** every result stores its method, source document, start header and end header. Phase 4 can re-run results with only `item`-method filings as a robustness check.
+- **Library:** the plan said BeautifulSoup. We used `lxml` directly, which BeautifulSoup itself uses underneath: it parsed the sample files about 5x faster (0.1–0.7 seconds per filing versus 0.3–3.9), so a full run takes minutes instead of over an hour.
+
+### D-021 Cleaning: page numbers, page headers and footers
+- **Removed:** page numbers ("23", "- 23 -", "Page 23"), "Table of Contents" links, and running page headers and footers.
+- **Rule for headers and footers:** a short line (100 characters or fewer, digits ignored) that appears 3+ times, with at least 90% of its copies within two lines of a page break or page number.
+  - On the samples, every real header and footer met this: Goldman Sachs 244 of 244 copies, Bank of America 45 of 45, Wells Fargo "Risk Factors (continued)" 6 of 6.
+  - Repeated real content didn't: a JPMorgan bullet repeated 7 times sat at a page boundary once, and an ICE sub-heading 2 of 3 times.
+  - An earlier, simpler rule ("any short line repeated 3+ times") wrongly removed both, which is why position is part of the rule.
+- **Also removed:** short footers containing a changing page number that appear 5+ times outside tables ("Apple Inc. | 2025 Form 10-K | 12"), for documents without page-break markers; and a short leftover line at the very end of the section at a page boundary (JPMorgan's "Parts I and II").
+- **Known limitation:** a short real line that sits next to a page break in nearly every copy would be removed. We saw none in the samples.
+
+### D-022 Two versions of the text
+- **Display version:** paragraphs as written, with bold and italic marked and data tables included (flagged as tables), for the dashboard and for headings of individual risk factors.
+- **Scoring version:** prose only (data tables dropped), curly quotes and dashes made plain, bullet characters removed, one paragraph per line. Lower-casing and word-splitting are Phase 3 choices.
+- **Kept in both:** risk-factor sub-headings, because they are part of what the company wrote.
+
+### D-023 Quality checks
+Each extraction is `ok`, `flagged`, `not_found`, or `error`. Flags:
+- `short`: under 1,000 words. S&P 500 risk sections are usually 4,000–28,000; the samples' shortest was 4,148.
+- `long`: over 50,000 words.
+- `overrun`: a later item's header appears inside the text, a sign we grabbed too much.
+- `length_jump`: more than 3x longer or shorter than the same company's prior-year extraction. Usually an extraction error, sometimes a real rewrite; each one gets looked at.
+
+Flagged filings are kept, not dropped, and are listed in `reports/phase2_flagged.csv`.
+
+### D-024 Re-running after fixes
+Each result stores the version of the extraction code (`EXTRACTOR_VERSION`). Changing the rules means bumping the version. The next run then redoes every filing, so all results always come from the same rules.
+
+---
+
 ## Known limitations (to disclose)
 
 1. **Free price data drops delisted stocks.** Fixing membership doesn't fully fix survivorship bias. If a company went bankrupt, its 10-K may be in our data while its final price crash is missing. This needs WRDS/CRSP, or a clear disclosure. (Phase 4)
@@ -135,5 +177,6 @@ Every choice that could change the results is recorded here: what we chose, what
 - [x] Review the `suspicious_mapping` rows in `reports/gaps.csv` (Exxon: fixed by D-018)
 - [x] Re-run with `predecessors.csv` and confirm Exxon, BlackRock, Bunge and APA are complete (+8 sample, +4 comparison filings, as predicted)
 - [x] Decide how to treat spin-offs and mergers with no prior 10-K: first year left unscored (D-019)
+- [ ] Phase 2: hand-review 20 random extractions and every flagged case
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)
