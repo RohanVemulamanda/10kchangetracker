@@ -31,11 +31,12 @@ from .sections import (ITEM_1A, MIN_SECTION_WORDS, PAGE_RANGE, SectionSpec, cut_
 log = logging.getLogger(__name__)
 
 # Bump this whenever the extraction rules change. Rows made by an older version get redone.
-EXTRACTOR_VERSION = "1.2"   # 1.1: "Item 1.A.", "Part I. Item 1A.", bold run-in headings, page headers
+EXTRACTOR_VERSION = "1.3"   # 1.1: "Item 1.A.", "Part I. Item 1A.", bold run-in headings, page headers
                             #      can't end a section, headed parts, page-range stop (D-026)
                             # 1.2: quoted cross-references and "Part I Item 1A & 1B" page headers aren't
                             #      headers, contents rows with page numbers first, last page headed
                             #      "Item 1A" ends a heading section (D-027)
+                            # 1.3: a quoted title never ends a section (Morgan Stanley 2025, D-027)
 
 # Quality-check thresholds (D-021)
 MIN_WORDS_OK = 1_000

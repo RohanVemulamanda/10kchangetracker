@@ -191,7 +191,7 @@ The first run (v1.0) extracted 99% of sample filings. The 39 flagged or missing 
 
 **Reviewed by hand and kept as is:** the `long` flags (over 50,000 words) for KKR (68,000–71,000), Ares (52,000–54,000) and Moderna 2020 (54,000). Each runs from the Item 1A header to the Item 1B header, ends on the company's real last risk factor, and has a steady length year to year. These firms really do write very long risk sections. The flag stays, so it remains visible.
 
-### D-027 Extraction version 1.2: two v1.1 regressions, one older error, and a change log
+### D-027 Extraction versions 1.2 and 1.3: two v1.1 regressions, older errors, and a change log
 The v1.1 run extracted every sample filing (2,494 of 2,494). Checking it turned up four problems.
 
 **Two cases v1.1 broke** (both from the "Part I. Item 1A." rule added for Expedia):
@@ -217,6 +217,23 @@ A small cleanup: a bare number in front of a title is no longer removed unless a
 - All 12 Entergy and Colgate filings were compared with v1.0. Eleven match exactly. Entergy 2020 changed, as intended.
 - Three of these filings were added to the real-filing tests (Honeywell 2025, Colgate 2021, Entergy 2020).
 
+**What the v1.2 full run changed (21 filings, every one checked):**
+- **Fixes we expected:** Colgate 2021, Entergy 2020 and Honeywell 2025.
+- **Fixes we didn't know we needed:**
+  - Honeywell 2021–2024 had the same contents layout. Every year had run about 12,000 words into the financial discussion; they're now 6,000–7,400, in line with 2020's 5,961.
+  - Xylem 2022, International Paper 2025 and GE Vernova 2024 had stopped early at a quoted cross-reference, like Colgate.
+  - US Bancorp 2025 had run to the end of the document, including the list of executives. It now stops at "Managing Committee", the next contents entry, as 2024 does (2024's text is unchanged).
+- **The section header line no longer counted as text:** Entergy 2021–2022 and ResMed 2020–2025 each lost 4 words. In v1.1 a page header had become the start, so the real header line ("ITEM 1A RISK FACTORS") was included. All eight now match v1.0 exactly.
+- **One new error, fixed in v1.3:** Morgan Stanley 2025 fell from 10,574 to 5,905 words. The broader "Quantitative and qualitative disclosure..." end title matched a quoted cross-reference split by a page break. A title in quotation marks can no longer end a section. All six Morgan Stanley years now match v1.0.
+- **GE Vernova:** 2024 (25,920 words, pages 11–31, its first 10-K after the spin-off) and 2025 (10,249 words, pages 11–20) are both right. The 2025 risk factors were rewritten and shortened.
+
+**The 27 year-to-year length changes over 1.5x, every one checked:**
+- For each pair we compared the first and last 300 characters of both years. All but Morgan Stanley start right after the Item 1A header and stop at the Item 1B header, ending on a real last risk factor.
+- Many have a visible reason in the text itself, such as a deal that year: Interpublic (the merger), Paramount (Skydance), Exelon (the separation plan), Waters (the BDS acquisition), Keurig Dr Pepper (the planned separation) and Healthpeak (the "Combined Company"). Others look like rewrites (Vertex, Occidental, KKR, Starbucks).
+- 26 are real changes in the text. The other, Morgan Stanley 2025, was the v1.2 error above.
+
+**Known issue, not fixed:** in about 6% of sections, some sentences are split across lines, because the 10-K puts each printed line in its own HTML element and the lines are too long for the v1.1 rejoining rule (Vertex 2025, for example). Word counts and the words themselves are unaffected.
+
 ---
 
 ## Known limitations (to disclose)
@@ -236,8 +253,9 @@ A small cleanup: a bare number in front of a title is no longer removed unless a
 - [x] Decide how to treat spin-offs and mergers with no prior 10-K: first year left unscored (D-019)
 - [x] PARA fix re-run (sample 2,495 -> 2,494: Banzai's 4 years out, Paramount's 3 in) and filer-size check reviewed
 - [x] Phase 2: re-run with extraction v1.1 (2,494 of 2,494 sample filings extracted; problems fixed in v1.2, D-027)
-- [ ] Phase 2: re-run with extraction v1.2 and review every change in `reports/phase2_changes.csv`
-- [ ] Phase 2: review `reports/phase2_length_changes.csv` (year-to-year changes over 1.5x)
+- [x] Phase 2: re-run with extraction v1.2 and review every change in `reports/phase2_changes.csv` (21 changes; one error, fixed in v1.3)
+- [x] Phase 2: review `reports/phase2_length_changes.csv` (27 cases; 26 real, Morgan Stanley fixed in v1.3)
+- [ ] Phase 2: re-run with v1.3; expect exactly one change (Morgan Stanley 2025, back to 10,574 words)
 - [ ] Phase 2: hand-review 20 random extractions and every remaining flagged case
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)
