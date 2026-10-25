@@ -24,6 +24,7 @@ COMMANDS = {
     "find-filings": "Get each company's filing list and choose the 10-Ks we need.",
     "download": "Download the chosen filings. Safe to stop and restart.",
     "summary": "Write and print reports/phase1_summary.md.",
+    "spot-check": "Print 10 random downloaded filings with EDGAR links, to check by hand.",
     "all": "universe -> map-tickers -> find-filings -> download -> summary",
 }
 
@@ -35,9 +36,11 @@ def main() -> int:
         sub = subcommands.add_parser(name, help=help_text)
         if name in {"find-filings", "download", "all"}:
             sub.add_argument("--tickers", help="Only these tickers, comma-separated (for trial runs), e.g. AAPL,JPM,META")
+        if name == "spot-check":
+            sub.add_argument("--seed", type=int, help="Pick the same random filings as a previous spot check")
     args = parser.parse_args()
     tickers = [t.strip() for t in args.tickers.split(",") if t.strip()] if getattr(args, "tickers", None) else None
-    return pipeline.run(args.command, tickers)
+    return pipeline.run(args.command, tickers, getattr(args, "seed", None))
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@
   find-filings  get each company's filing list and choose the 10-Ks we need
   download      download the chosen filings (resumes where it left off)
   summary       write reports/phase1_summary.md
+  spot-check    print 10 random downloaded filings with EDGAR links, to check by hand
   all           universe -> map-tickers -> find-filings -> download -> summary
 """
 from __future__ import annotations
@@ -200,9 +201,32 @@ def step_find_filings(settings: dict, conn: sqlite3.Connection, client: EdgarCli
     return stats
 
 
+# ------------------------------------------------------------------ spot check
+
+def step_spot_check(conn: sqlite3.Connection, how_many: int = 10, seed: int | None = None) -> None:
+    """Print random downloaded sample filings with links, for checking by hand against EDGAR."""
+    import random
+
+    rows = [dict(r) for r in conn.execute(
+        "SELECT f.accession_number, f.cik, f.filing_date, f.report_date, f.acceptance_et, f.fiscal_year, "
+        "f.member_tickers, c.name_current FROM filings f LEFT JOIN companies c ON c.cik = f.cik "
+        "WHERE f.selected = 1 AND f.role = 'sample' AND f.status = 'downloaded' ORDER BY f.accession_number")]
+    if not rows:
+        print("No downloaded sample filings yet.")
+        return
+    seed = seed if seed is not None else random.randrange(10_000)
+    picks = random.Random(seed).sample(rows, min(how_many, len(rows)))
+    print(f"{len(picks)} random filings (seed {seed}; run `spot-check --seed {seed}` to get the same ones again)\n")
+    for r in picks:
+        acc = r["accession_number"]
+        print(f"{r['name_current']} ({r['member_tickers']}), fiscal year {r['fiscal_year']}")
+        print(f"  ours:  filed {r['filing_date']} | accepted {r['acceptance_et']} ET | period {r['report_date']}")
+        print(f"  EDGAR: https://www.sec.gov/Archives/edgar/data/{r['cik']}/{acc.replace('-', '')}/{acc}-index.htm\n")
+
+
 # ------------------------------------------------------------------ run a command
 
-def run(command: str, tickers: list[str] | None = None) -> int:
+def run(command: str, tickers: list[str] | None = None, seed: int | None = None) -> int:
     settings = load_settings()
     p = paths(settings)
     log_path = setup_logging(command.replace("-", "_"), p["logs_dir"])
@@ -214,6 +238,9 @@ def run(command: str, tickers: list[str] | None = None) -> int:
 
         if command == "check":
             return 0 if step_check(settings, client) else 1
+        if command == "spot-check":
+            step_spot_check(conn, seed=seed)
+            return 0
 
         if command in {"universe", "all"}:
             build_universe(settings, conn, p["reference_dir"])

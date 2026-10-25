@@ -6,15 +6,17 @@ Three companies:
   META   (CIK 3) was "FB" until 2022-06-09. FB is deliberately left unmapped, to show
          how a missing ticker mapping drops filings and shows up in the gap report.
 """
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from helpers import make_client, ok, submissions_columns, tenk
 from tracker import db
 from tracker.downloader import download_pending
 from tracker.header import document_url, index_headers_url
-from tracker.pipeline import step_find_filings
+from tracker.pipeline import step_find_filings, step_spot_check
 from tracker.submissions import SUBMISSIONS_URL
 from tracker.summary import write_summary
 
@@ -101,6 +103,11 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("| 2022 | 3 |", text)  # three companies sampled in FY2022
         gaps = (self.reports / "gaps.csv").read_text(encoding="utf-8")
         self.assertIn("unmapped_ticker", gaps)
+
+        printed = io.StringIO()
+        with redirect_stdout(printed):
+            step_spot_check(self.conn, how_many=3, seed=7)
+        self.assertEqual(printed.getvalue().count("https://www.sec.gov/Archives/edgar/data/"), 3)
 
 
 if __name__ == "__main__":
