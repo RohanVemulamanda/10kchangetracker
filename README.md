@@ -21,8 +21,8 @@ You need Python 3.10 or newer and git.
 
 **Mac (Terminal):**
 ```bash
-git clone <your repo URL>
-cd 10k-change-tracker
+git clone https://github.com/RohanVemulamanda/10kchangetracker.git
+cd 10kchangetracker
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -31,8 +31,8 @@ cp .env.example .env
 
 **Windows (PowerShell):**
 ```powershell
-git clone <your repo URL>
-cd 10k-change-tracker
+git clone https://github.com/RohanVemulamanda/10kchangetracker.git
+cd 10kchangetracker
 py -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
