@@ -197,6 +197,15 @@ def build_universe(settings: dict, conn: sqlite3.Connection, reference_dir: Path
     """Download the source list, build membership periods, save them, and return stats."""
     historical = download_source_file(settings, settings["universe"]["historical_file"], reference_dir)
     current = download_source_file(settings, settings["universe"]["current_file"], reference_dir)
+    for path, key in [(historical, "historical_file_sha256"), (current, "current_file_sha256")]:
+        expected = settings["universe"].get(key)
+        actual = sha256_of(path)
+        if expected and actual != expected:
+            raise RuntimeError(
+                f"{path.name} does not match the fingerprint in settings.yaml ({key}). "
+                f"Expected {expected}, got {actual}. Delete the file and run again; if it still "
+                "doesn't match, the source changed and the new version needs checking before use."
+            )
 
     snapshots = load_snapshots(historical)
     sizes = [len(t) for _, t in snapshots]
@@ -232,7 +241,6 @@ def build_universe(settings: dict, conn: sqlite3.Connection, reference_dir: Path
         "snapshot_rows": len(snapshots),
         "periods": len(periods),
         "unique_tickers": len({p["sec_ticker"] for p in periods}),
-        "built_at": datetime.now().isoformat(timespec="seconds"),
     }
     with open(reference_dir / "universe_source.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)

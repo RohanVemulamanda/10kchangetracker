@@ -20,6 +20,10 @@ universe:
   source_commit: a2430f2af0c79ddf0748e91de11bdeb1616ab5a7
   historical_file: "S&P 500 Historical Components & Changes (Updated).csv"
   current_file: "sp500.csv"           # today's list from Wikipedia, incl. CIKs (used as a cross-check)
+  # Fingerprints (SHA-256) of the two files at that commit. The universe step refuses
+  # to continue if a download doesn't match, so everyone works from identical data.
+  historical_file_sha256: 36326709d46d6cd25834de5df457b16f5f96fad3a06b9beac28f7b88aa0b0d54
+  current_file_sha256: e06b473e4679074b2aaa49da67dfc154338b466ca66102935d93486c34e16883
 
 # --- Which filings (D-002 to D-007) ---
 sample:
@@ -44,4 +48,4 @@ sec:
   timeout_seconds: 30
   stop_after_consecutive_403: 3       # 403 = SEC refusing us; stop instead of hammering
   max_download_attempts: 3            # across runs, before a filing stays "failed"
-  refresh_submissions: false          # true = re-download company filing lists (needed to pick up new filings)
+  refresh_submissions: false          # true = re-download company filing lists and SEC's ticker file (to pick up new filings)
