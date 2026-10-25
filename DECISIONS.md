@@ -343,6 +343,17 @@ Choices made 2026-10-25, **before any stock returns were downloaded or looked at
   - the interval's upper end is below 0.25% a month: **evidence against a meaningful effect** in this sample. The 0.25% cut-off is our choice of the smallest economically interesting effect (3% a year); it's not from the paper.
 - **Not decided yet:** the price data source (D-034), which depends on whether Rohan has WRDS access.
 
+### D-034 Stock prices: waiting for WRDS
+- **Plan:** CRSP monthly stock files through WRDS. They are the research standard, include delisting returns (the final return when a company is acquired or goes bankrupt), and are the data the paper used. Rohan requested WRDS access on 2026-10-25; approval takes a few days.
+- **If access is refused:** the choice is between a paid end-of-day data service that keeps delisted stocks, and free Yahoo data with delisted companies' final returns filled in by hand (about 60 sample companies were acquired or delisted). Rohan decides then.
+- **Code doesn't depend on the source:** the portfolio code (`src/tracker/portfolios.py`) takes a plain table of company, month, total return and starting market value, built from whichever source is used.
+
+### D-035 Risk factors: Kenneth French data library
+- **Chose:** the Fama–French 5 factors (2x3) and the momentum factor, monthly, from Kenneth French's free data library. They're the standard factors and are built from CRSP, so they match the main price source.
+- **Pinned:** the files built from the August 2026 CRSP database (monthly data July 1963 – August 2026), SHA-256 in `config/settings.yaml`. French revises past values slightly with each update, so pinning keeps results reproducible. The files are downloaded by hand into `data/reference/sources/ff/` (not committed).
+- **Effect on the hold-out:** with factors through August 2026, the hold-out has 6 months (March–August 2026) until the next update. These files contain only market-wide factor returns, nothing about our portfolios, so having them before the main results doesn't affect the "decided in advance" rule (D-033).
+- **Statistics code** (`src/tracker/backtest_stats.py`) is written with numpy only: least-squares alphas with Newey–West standard errors (3 lags) and Fama–MacBeth regressions. It's checked against hand calculations in the tests.
+
 ---
 
 ## Known limitations (to disclose)
@@ -374,5 +385,5 @@ Choices made 2026-10-25, **before any stock returns were downloaded or looked at
 - [ ] Phase 3: check the similarity definitions and text preparation against the *Lazy Prices* paper itself (no PDF in the project yet)
 - [ ] Phase 5: Loughran–McDonald lists are free for academic research only; check the license before any public or commercial dashboard (D-032)
 - [ ] Phase 4: price data must follow ticker changes (e.g. Equity Residential became Vivmark Residential after its 2026 merger with AvalonBay; the ticker is expected to change from EQR)
-- [ ] Lock in the held-out time period
+- [x] Lock in the held-out time period: portfolio months from March 2026 (D-033)
 - [ ] Decide which share class to use for two-class companies (D-010)

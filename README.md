@@ -12,7 +12,7 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**. Start
 | 1 | Download 10-Ks for historical S&P 500 members | **Done**: 2,494 sample + 552 comparison 10-Ks, verified ([report](docs/phase1_report.md)) |
 | 2 | Extract Item 1A (Risk Factors) | **Done**: all 2,494 sample filings extracted; 20 of 20 correct in the hand review ([report](docs/phase2_report.md)) |
 | 3 | Change scores | **Done**: 2,482 of 2,494 sample 10-Ks scored on four measures (the other 12 are first-ever 10-Ks) ([report](docs/phase3_report.md)) |
-| 4 | Backtest | Not started |
+| 4 | Backtest | **In progress**: test design fixed in advance (D-033); factors and portfolio code built; waiting for WRDS price data |
 | 5 | Live tool and dashboard | Not started |
 
 ## Setup (one time)
@@ -91,6 +91,12 @@ python run.py review-scores                  # writes reports/phase3_review.html
 - **Word lists (one-time download):** open https://sraf.nd.edu/loughranmcdonald-master-dictionary/, download the Master Dictionary CSV (March 2026 release, file "1993-2025"), and save it as `data/reference/sources/lm/LM_MasterDictionary_1993-2025.csv`. `python run.py score` then counts negative, uncertain and litigious words in new and dropped sentences (table `change_words`, D-032). Without the file that step is skipped. The lists are free for academic research only.
 - A pair is scored again automatically if either year's text changes (for example after a new extraction). After changing the scoring rules, bump `SCORER_VERSION` in `src/tracker/score.py`.
 
+## Running Phase 4 (backtest): in progress
+
+The test design is fixed in DECISIONS.md (D-033) before any returns are used. Stock prices will come from CRSP through WRDS (D-034, waiting for access).
+
+**Risk factors (one-time download, D-035):** from Kenneth French's data library (https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html), download "Fama/French 5 Factors (2x3)" and "Momentum Factor (Mom)", monthly CSV zips. Save them unchanged in `data/reference/sources/ff/`. The pinned versions (August 2026 CRSP database) are fingerprinted in `config/settings.yaml`. A newer download will be refused until the fingerprints are updated on purpose, with a note in DECISIONS.md.
+
 ## Checking Phase 1 is correct
 
 1. **Hand-check 10 random filings.** Run `python run.py spot-check`. It prints 10 random downloaded filings with what we stored, plus a link to each one's EDGAR page. Open each link and compare the filing date, "Accepted" time, and "Period of Report" with our values.
@@ -136,6 +142,9 @@ src/tracker/             the code, one file per job:
   risk_summary.py          Phase 3: find and remove the risk factor summary
   similarity.py            Phase 3: the four similarity measures
   wordlists.py             Phase 3: Loughran-McDonald word counts in new and dropped sentences
+  factors.py               Phase 4: Fama-French factors from Kenneth French's data library
+  portfolios.py            Phase 4: monthly quintile portfolios by change score
+  backtest_stats.py        Phase 4: alphas (Newey-West) and Fama-MacBeth regressions
   score.py                 Phase 3: score every sample 10-K against its prior year
   score_report.py          Phase 3: summary, score list, review page
   pipeline.py              runs the steps in order
