@@ -255,8 +255,10 @@ A small cleanup: a bare number in front of a title is no longer removed unless a
 - [x] Phase 2: re-run with extraction v1.1 (2,494 of 2,494 sample filings extracted; problems fixed in v1.2, D-027)
 - [x] Phase 2: re-run with extraction v1.2 and review every change in `reports/phase2_changes.csv` (21 changes; one error, fixed in v1.3)
 - [x] Phase 2: review `reports/phase2_length_changes.csv` (27 cases; 26 real, Morgan Stanley fixed in v1.3)
-- [ ] Phase 2: re-run with v1.3; expect exactly one change (Morgan Stanley 2025, back to 10,574 words)
-- [ ] Phase 2: hand-review 20 random extractions and every remaining flagged case
+- [x] Phase 2: re-run with v1.3; exactly one change, as predicted (Morgan Stanley 2025, back to 10,574 words)
+- [x] Phase 2: hand-review 20 random extractions (seed 4689: 20 of 20 correct on start, end and cleanliness) and every remaining flagged case (5 `long`, all real)
 - [ ] Phase 3: sentence splitting must ignore line breaks (D-027 known issue)
+- [ ] Phase 3: decide whether to remove risk factor summaries (many companies added one in FY2020–2021, which would look like a big change)
+- [ ] Phase 4: price data must follow ticker changes (e.g. Equity Residential became Vivmark Residential after its 2026 merger with AvalonBay; the ticker is expected to change from EQR)
 - [ ] Lock in the held-out time period
 - [ ] Decide which share class to use for two-class companies (D-010)

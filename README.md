@@ -2,7 +2,7 @@
 
 Do companies that change the wording of their 10-K filings underperform afterward? The paper *Lazy Prices* (Cohen, Malloy & Nguyen, *Journal of Finance*, 2020) found that they did in 1995–2014. This project tests whether that still holds on recent data, measures *what kind* of language changed, and will become a live dashboard.
 
-Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**.
+Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**. Starting a new work session? Read [docs/HANDOFF.md](docs/HANDOFF.md) first.
 
 ## Status
 
@@ -10,7 +10,7 @@ Every methodology choice is explained in **[DECISIONS.md](DECISIONS.md)**.
 |---|---|---|
 | 0 | Project setup | Done |
 | 1 | Download 10-Ks for historical S&P 500 members | **Done**: 2,494 sample + 552 comparison 10-Ks, verified ([report](docs/phase1_report.md)) |
-| 2 | Extract Item 1A (Risk Factors) | Version 1.3; every sample filing extracted (2,494 of 2,494). **Final re-run and hand review pending** |
+| 2 | Extract Item 1A (Risk Factors) | **Done**: all 2,494 sample filings extracted; 20 of 20 correct in the hand review ([report](docs/phase2_report.md)) |
 | 3 | Change scores | Not started |
 | 4 | Backtest | Not started |
 | 5 | Live tool and dashboard | Not started |
